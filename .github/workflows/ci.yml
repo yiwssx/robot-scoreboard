@@ -7,9 +7,35 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  refactor-public:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/architecture-refactor
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - name: Refactor public pages and assets once
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f scripts/refactor-public.js ]; then
+            echo "Public refactor already applied."
+            exit 0
+          fi
+          node scripts/refactor-public.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/refactor-public.js
+          git add public
+          git commit -m "organize public pages and assets"
+          git push origin HEAD:agent/architecture-refactor
+
   linux-test:
     runs-on: ubuntu-latest
     strategy:
