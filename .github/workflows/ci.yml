@@ -31,15 +31,16 @@ jobs:
           base64 -d /tmp/changes.b64 > /tmp/changes.tgz
           echo "367d77d8ee40bcde66217eb71b69ef0fefd279e08d487ae2faf3346f662f3600  /tmp/changes.tgz" | sha256sum -c -
           tar -xzf /tmp/changes.tgz
-      - name: Commit field hardening
+      - name: Commit source hardening
         shell: bash
         run: |
           set -euo pipefail
+          git restore .github/workflows/ci.yml
+          rm -f .github/workflows/release-offline.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm -f .github/workflows/apply-field-hardening.yml || true
-          git add README.md package.json .gitignore server.js config src public/field-safety.js public/final-warning.js test scripts .github/workflows/ci.yml .github/workflows/release-offline.yml
-          git commit -m "complete offline field hardening and release workflow"
+          git add README.md package.json .gitignore server.js config src public/field-safety.js public/final-warning.js test scripts
+          git commit -m "complete offline field hardening"
           git push origin HEAD:agent/re-engineering-hardening
 
   test:
