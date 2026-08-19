@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/domain.js && node --check src/rules.js && node --check src/persistence.js && node --check src/event-log.js && node --check src/scoreboard.js && node --check src/socket-handlers.js && node --check public/field-safety.js && node --check public/final-warning.js && node --check scripts/stress-obs.js",
+    "check": "node scripts/check-js.js",
     "test": "node --test test/*.test.js",
     "stress:obs": "node scripts/stress-obs.js",
     "build:offline:windows": "powershell -ExecutionPolicy Bypass -File scripts/build-offline-windows.ps1"
