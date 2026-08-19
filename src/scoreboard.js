@@ -1,11 +1,12 @@
 "use strict";
 
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 const {
   cleanTeamName,
   cleanSchoolName,
   normalizeTeamWeight,
   normalizeMissionShots,
+  normalizeCorrectionTime,
   formatTime,
   normalizeScoreDelta,
   getMissionPoint,
@@ -14,13 +15,18 @@ const {
   elapsedSecondsFromClock,
   getWinnerInfoFromValues,
 } = require("./domain");
+const { normalizeRules } = require("./rules");
 const { Persistence } = require("./persistence");
+const { EventLog } = require("./event-log");
 
 const MAX_RESULTS = 200;
 const TIMER_POLL_MS = 100;
+const STATUSES = new Set(["READY", "RUNNING", "PAUSED", "FINISH"]);
 
-function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
+function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: suppliedRules = {} }) {
+  const rules = normalizeRules(suppliedRules);
   const persistence = new Persistence({ dataDir, obsDir });
+  const eventLog = new EventLog(dataDir);
 
   let scoreA = 0;
   let scoreB = 0;
@@ -37,12 +43,39 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
   let matchResults = [];
   let currentMatchSaved = false;
   let currentMatchSavedResultId = "";
+  let resultLocked = false;
   let timeElapsed = 0;
-  let matchDuration = 180;
-  let status = "STOP";
+  let matchDuration = rules.matchDurationSeconds;
+  let status = "READY";
   let timerHandle = null;
   let timerStartedAtNs = null;
   let timerBaseElapsedMs = 0;
+
+  function contextFields(context) {
+    const safe = context && typeof context === "object" ? context : {};
+    return {
+      socketId: String(safe.socketId || "").slice(0, 100) || undefined,
+      ip: String(safe.ip || "").slice(0, 100) || undefined,
+      page: String(safe.page || "").slice(0, 100) || undefined,
+    };
+  }
+
+  function log(action, details = {}, context = {}) {
+    const entry = {
+      at: new Date().toISOString(),
+      action,
+      status,
+      elapsedSeconds: timeElapsed,
+      teamNameA,
+      teamNameB,
+      scoreA,
+      scoreB,
+      ...contextFields(context),
+      details,
+    };
+    void eventLog.append(entry);
+    return entry;
+  }
 
   function getTeamWeight(name) {
     const cleanName = cleanTeamName(name);
@@ -71,28 +104,36 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
   }
 
   function findTeamNameIndex(name) {
-    const cleanName = cleanTeamName(name).toLocaleLowerCase();
-    return teamNames.findIndex((item) => item.toLocaleLowerCase() === cleanName);
+    const clean = cleanTeamName(name).toLocaleLowerCase();
+    return teamNames.findIndex((item) => item.toLocaleLowerCase() === clean);
   }
 
   function addTeamNameToList(name) {
-    const cleanName = cleanTeamName(name);
-    if (!cleanName) return "";
-    const existing = findTeamNameIndex(cleanName);
+    const clean = cleanTeamName(name);
+    if (!clean) return "";
+    const existing = findTeamNameIndex(clean);
     if (existing >= 0) return teamNames[existing];
-    teamNames.push(cleanName);
-    return cleanName;
+    teamNames.push(clean);
+    return clean;
   }
 
   function normalizeTeamList(names) {
     teamNames = [];
     if (Array.isArray(names)) names.forEach(addTeamNameToList);
     if (teamNames.length === 0) teamNames = ["TEAM A", "TEAM B"];
+    if (teamNames.length === 1) addTeamNameToList(teamNames[0] === "TEAM A" ? "TEAM B" : "TEAM A");
+  }
+
+  function ensureDistinctSelectedTeams() {
+    if (teamNameA !== teamNameB) return;
+    const replacement = teamNames.find((name) => name !== teamNameA);
+    if (replacement) teamNameB = replacement;
+    else teamNameB = addTeamNameToList(teamNameA === "TEAM A" ? "TEAM B" : "TEAM A");
   }
 
   function normalizeMatchResult(result) {
     const safe = result && typeof result === "object" ? result : {};
-    const winnerInfo = getWinnerInfoFromValues(
+    const winner = getWinnerInfoFromValues(
       safe.scoreA,
       safe.scoreB,
       safe.shotA,
@@ -102,7 +143,7 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
       safe.teamNameA,
       safe.teamNameB
     );
-    return { ...safe, winner: winnerInfo.winner, winnerName: winnerInfo.winnerName };
+    return { ...safe, winner: winner.winner, winnerName: winner.winnerName, locked: Boolean(safe.locked) };
   }
 
   async function loadTeamData() {
@@ -114,17 +155,18 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
       teamNames.forEach((name) => setTeamWeight(name, saved.teamWeights && saved.teamWeights[name]));
       teamNames.forEach((name) => setTeamSchool(name, saved.teamSchools && saved.teamSchools[name]));
       teamNameA = cleanTeamName(saved.teamNameA) || teamNames[0] || "TEAM A";
-      teamNameB = cleanTeamName(saved.teamNameB) || teamNames[1] || teamNames[0] || "TEAM B";
+      teamNameB = cleanTeamName(saved.teamNameB) || teamNames[1] || "TEAM B";
       teamNamesVisible = typeof saved.teamNamesVisible === "boolean" ? saved.teamNamesVisible : true;
       teamNameA = addTeamNameToList(teamNameA);
       teamNameB = addTeamNameToList(teamNameB);
+      ensureDistinctSelectedTeams();
       return;
     }
-
     const savedNameA = cleanTeamName(await persistence.readLegacyText("team-name-a.text"));
     const savedNameB = cleanTeamName(await persistence.readLegacyText("team-name-b.text"));
     teamNameA = addTeamNameToList(savedNameA || "TEAM A");
     teamNameB = addTeamNameToList(savedNameB || "TEAM B");
+    ensureDistinctSelectedTeams();
   }
 
   async function loadResults() {
@@ -134,48 +176,36 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
 
   async function loadLiveState() {
     const saved = await persistence.firstExistingJson("live-match-state.json", "live-match-state.json", null);
-    if (!saved || typeof saved !== "object") return;
+    if (!saved || typeof saved !== "object") return { recovered: false, fromStatus: null };
 
     const a = Number(saved.scoreA);
     const b = Number(saved.scoreB);
     scoreA = Number.isFinite(a) ? Math.max(Math.floor(a), 0) : 0;
     scoreB = Number.isFinite(b) ? Math.max(Math.floor(b), 0) : 0;
-    matchDuration = normalizeMatchDuration(saved.matchDuration, 180);
+    matchDuration = normalizeMatchDuration(saved.matchDuration, rules.matchDurationSeconds);
 
     const elapsed = Number(saved.timeElapsed);
-    timeElapsed = Number.isFinite(elapsed)
-      ? Math.min(Math.max(Math.floor(elapsed), 0), matchDuration)
-      : 0;
-
+    timeElapsed = Number.isFinite(elapsed) ? Math.min(Math.max(Math.floor(elapsed), 0), matchDuration) : 0;
     shotA = String(saved.shotA || "");
     shotB = String(saved.shotB || "");
-    const recordedA = Array.isArray(saved.recordedMissionShotsA);
-    const recordedB = Array.isArray(saved.recordedMissionShotsB);
-    missionShotsA = normalizeMissionShots(recordedA ? saved.recordedMissionShotsA : saved.missionShotsA);
-    missionShotsB = normalizeMissionShots(recordedB ? saved.recordedMissionShotsB : saved.missionShotsB);
+    missionShotsA = normalizeMissionShots(saved.recordedMissionShotsA || saved.missionShotsA);
+    missionShotsB = normalizeMissionShots(saved.recordedMissionShotsB || saved.missionShotsB);
     teamNameA = addTeamNameToList(saved.teamNameA || teamNameA) || teamNameA;
     teamNameB = addTeamNameToList(saved.teamNameB || teamNameB) || teamNameB;
+    ensureDistinctSelectedTeams();
 
-    const savedStatus = String(saved.status || "STOP").toUpperCase();
-    status = new Set(["STOP", "RUNNING", "FINISH"]).has(savedStatus) ? savedStatus : "STOP";
-
-    const finishTime = formatTime(matchDuration);
-    if (!recordedA && status === "FINISH" && shotA === finishTime && missionShotsA[3] === finishTime) {
-      missionShotsA[3] = "";
-    }
-    if (!recordedB && status === "FINISH" && shotB === finishTime && missionShotsB[3] === finishTime) {
-      missionShotsB[3] = "";
-    }
-
-    if (status === "RUNNING") status = "STOP";
+    const fromStatus = String(saved.status || "READY").toUpperCase();
+    if (fromStatus === "RUNNING") status = "PAUSED";
+    else if (fromStatus === "STOP") status = timeElapsed > 0 ? "PAUSED" : "READY";
+    else status = STATUSES.has(fromStatus) ? fromStatus : "READY";
 
     const resultId = String(saved.currentMatchSavedResultId || "");
-    currentMatchSaved = Boolean(
-      saved.currentMatchSaved &&
-      resultId &&
-      matchResults.some((result) => result && result.id === resultId)
-    );
+    currentMatchSaved = Boolean(saved.currentMatchSaved && resultId && matchResults.some((r) => r && r.id === resultId));
     currentMatchSavedResultId = currentMatchSaved ? resultId : "";
+    const current = matchResults.find((r) => r && r.id === currentMatchSavedResultId);
+    resultLocked = currentMatchSaved ? Boolean(saved.resultLocked || (current && current.locked)) : false;
+
+    return { recovered: true, fromStatus };
   }
 
   function saveTeamData() {
@@ -232,6 +262,7 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
   function resetCurrentMatchSave() {
     currentMatchSaved = false;
     currentMatchSavedResultId = "";
+    resultLocked = false;
   }
 
   function nextMatchNumber() {
@@ -241,19 +272,23 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
     }, 0) + 1;
   }
 
-  function saveCurrentMatchResult(mode) {
+  function saveCurrentMatchResult(mode, context = {}) {
     if (currentMatchSaved) return false;
     const result = {
       id: `${Date.now()}-${crypto.randomBytes(3).toString("hex")}`,
       matchNumber: nextMatchNumber(),
       savedAt: new Date().toISOString(),
       mode: mode === "auto" ? "auto" : "manual",
+      locked: false,
+      lockedAt: null,
       ...currentResultFields(),
     };
     matchResults = [result, ...matchResults].slice(0, MAX_RESULTS);
     currentMatchSaved = true;
     currentMatchSavedResultId = result.id;
+    resultLocked = false;
     saveResults();
+    log("RESULT_SAVED", { resultId: result.id, matchNumber: result.matchNumber, mode: result.mode }, context);
     return true;
   }
 
@@ -261,7 +296,7 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
     if (!currentMatchSaved || !currentMatchSavedResultId) return false;
     const index = matchResults.findIndex((item) => item && item.id === currentMatchSavedResultId);
     if (index < 0) return false;
-    matchResults[index] = { ...matchResults[index], ...currentResultFields() };
+    matchResults[index] = { ...matchResults[index], ...currentResultFields(), locked: resultLocked };
     saveResults();
     return true;
   }
@@ -278,13 +313,12 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
       recordedMissionShotsB: normalizeMissionShots(missionShotsB),
       teamNameA,
       teamNameB,
-      teamSchoolA: getTeamSchool(teamNameA),
-      teamSchoolB: getTeamSchool(teamNameB),
       timeElapsed,
       matchDuration,
       status,
       currentMatchSaved,
       currentMatchSavedResultId,
+      resultLocked,
       savedAt: new Date().toISOString(),
     };
   }
@@ -312,11 +346,18 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
       matchResults,
       currentMatchSaved,
       currentMatchSavedResultId,
+      resultLocked,
+      resultReviewRequired: status === "FINISH" && currentMatchSaved && !resultLocked,
       time: formatTime(timeElapsed),
       timeElapsed,
       matchDuration,
       remainingSeconds: Math.max(matchDuration - timeElapsed, 0),
+      finalWarningSeconds: rules.finalWarningSeconds,
       status,
+      rules: {
+        scoreAdjustments: [...rules.scoreAdjustments],
+        missions: { ...rules.missions },
+      },
     };
   }
 
@@ -333,12 +374,8 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
       "nameschool-a.text": teamNamesVisible ? getTeamSchool(teamNameA) : "",
       "nameschool-b.text": teamNamesVisible ? getTeamSchool(teamNameB) : "",
     };
-    normalizeMissionShots(missionShotsA).forEach((value, index) => {
-      values[`mission_shot_a_${index + 1}.txt`] = value;
-    });
-    normalizeMissionShots(missionShotsB).forEach((value, index) => {
-      values[`mission_shot_b_${index + 1}.txt`] = value;
-    });
+    normalizeMissionShots(missionShotsA).forEach((value, i) => { values[`mission_shot_a_${i + 1}.txt`] = value; });
+    normalizeMissionShots(missionShotsB).forEach((value, i) => { values[`mission_shot_b_${i + 1}.txt`] = value; });
     return values;
   }
 
@@ -360,77 +397,116 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
     timerStartedAtNs = null;
   }
 
-  function finishTimer() {
+  function finishTimer(context = {}) {
     clearTimer();
     timeElapsed = matchDuration;
     status = "FINISH";
     const finishTime = formatTime(matchDuration);
     if (!shotA) shotA = finishTime;
     if (!shotB) shotB = finishTime;
-    saveCurrentMatchResult("auto");
+    saveCurrentMatchResult("auto", context);
+    log("MATCH_FINISH", { resultReviewRequired: true }, context);
   }
 
-  function syncTimerFromClock() {
+  function syncTimerFromClock(context = {}) {
     if (status !== "RUNNING" || timerStartedAtNs === null) return false;
-    const next = elapsedSecondsFromClock(
-      timerBaseElapsedMs,
-      timerStartedAtNs,
-      process.hrtime.bigint(),
-      matchDuration
-    );
+    const next = elapsedSecondsFromClock(timerBaseElapsedMs, timerStartedAtNs, process.hrtime.bigint(), matchDuration);
     const changed = next !== timeElapsed;
     timeElapsed = next;
     if (timeElapsed >= matchDuration) {
-      finishTimer();
+      finishTimer(context);
       return true;
     }
     return changed;
   }
 
-  function startTimer() {
-    if (timerHandle !== null || status === "FINISH") return false;
-    if (timeElapsed >= matchDuration) timeElapsed = 0;
+  function startTimer(context = {}) {
+    if (timerHandle !== null || status === "RUNNING") return { ok: false, code: "MATCH_ALREADY_RUNNING" };
+    if (status === "FINISH") return { ok: false, code: "MATCH_FINISHED" };
+    if (status !== "READY" && status !== "PAUSED") return { ok: false, code: "INVALID_STATE" };
     status = "RUNNING";
     timerBaseElapsedMs = timeElapsed * 1000;
     timerStartedAtNs = process.hrtime.bigint();
     timerHandle = setInterval(() => {
       if (syncTimerFromClock()) emit();
     }, TIMER_POLL_MS);
+    log(timeElapsed === 0 ? "MATCH_START" : "MATCH_RESUME", {}, context);
     emit();
-    return true;
+    return { ok: true, status };
   }
 
-  function stopTimer() {
-    if (status === "FINISH") return false;
-    syncTimerFromClock();
+  function stopTimer(context = {}) {
+    if (status !== "RUNNING") return { ok: false, code: "MATCH_NOT_RUNNING" };
+    syncTimerFromClock(context);
     clearTimer();
-    status = "STOP";
+    if (status !== "FINISH") status = "PAUSED";
+    log("MATCH_PAUSE", {}, context);
     emit();
-    return true;
+    return { ok: true, status };
   }
 
-  function resetTimer(seconds = 180) {
+  function canPrepareNextMatch() {
+    if (status === "RUNNING" || status === "PAUSED") return { ok: false, code: "MATCH_ACTIVE" };
+    if (status === "FINISH" && currentMatchSaved && !resultLocked) return { ok: false, code: "RESULT_NOT_LOCKED" };
+    return { ok: true };
+  }
+
+  function resetMatchState(seconds) {
     clearTimer();
-    matchDuration = normalizeMatchDuration(seconds, 180);
+    matchDuration = normalizeMatchDuration(seconds, rules.matchDurationSeconds);
     timeElapsed = 0;
+    scoreA = 0;
+    scoreB = 0;
     shotA = "";
     shotB = "";
     missionShotsA = ["", "", "", ""];
     missionShotsB = ["", "", "", ""];
-    status = "STOP";
+    status = "READY";
     resetCurrentMatchSave();
-    emit();
-    return matchDuration;
   }
 
-  function addScore(team, point, allowAfterFinish = false) {
+  function resetTimer(seconds = rules.matchDurationSeconds, context = {}) {
+    const guard = canPrepareNextMatch();
+    if (!guard.ok) return guard;
+    resetMatchState(seconds);
+    log("MATCH_PREPARE", { matchDuration }, context);
+    emit();
+    return { ok: true, matchDuration };
+  }
+
+  function resetScore(context = {}) {
+    const guard = canPrepareNextMatch();
+    if (!guard.ok) return guard;
+    const duration = matchDuration;
+    resetMatchState(duration);
+    log("MATCH_RESET", { matchDuration }, context);
+    emit();
+    return { ok: true };
+  }
+
+  function resetAll(context = {}) {
+    const guard = canPrepareNextMatch();
+    if (!guard.ok) return guard;
+    resetMatchState(rules.matchDurationSeconds);
+    log("MATCH_RESET_ALL", { matchDuration }, context);
+    emit();
+    return { ok: true };
+  }
+
+  function requireRunning() {
+    return status === "RUNNING" ? null : { ok: false, code: status === "FINISH" ? "MATCH_FINISHED" : "MATCH_NOT_RUNNING" };
+  }
+
+  function addScore(team, point, context = {}) {
     const safeTeam = normalizeTeam(team);
-    const safePoint = normalizeScoreDelta(point);
+    const safePoint = normalizeScoreDelta(point, rules.scoreAdjustments);
     if (!safeTeam || safePoint === null) return { ok: false, code: "INVALID_COMMAND" };
-    syncTimerFromClock();
-    if (status === "FINISH" && !allowAfterFinish) return { ok: false, code: "MATCH_FINISHED" };
+    syncTimerFromClock(context);
+    const guard = requireRunning();
+    if (guard) return guard;
     if (safeTeam === "A") scoreA = Math.max(scoreA + safePoint, 0);
     else scoreB = Math.max(scoreB + safePoint, 0);
+    log("SCORE_ADJUST", { team: safeTeam, delta: safePoint }, context);
     emit();
     return { ok: true, point: safePoint };
   }
@@ -447,16 +523,11 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
     return Boolean(shots && index >= 0 && index < 4 && shots[index] !== "");
   }
 
-  function recordMissionShot(team, mission, allowAfterFinish = false) {
-    syncTimerFromClock();
+  function recordMissionShot(team, mission) {
     const safeTeam = normalizeTeam(team);
     const index = Number(mission) - 1;
     const shots = missionShotList(safeTeam);
-    const canAfterFinish = allowAfterFinish && index === 3;
-    if (!shots || index < 0 || index >= 4) return false;
-    if (status === "FINISH" && !canAfterFinish) return false;
-    if (shots[index] !== "") return false;
-
+    if (!shots || index < 0 || index >= 4 || shots[index] !== "") return false;
     const shotTime = formatTime(timeElapsed);
     shots[index] = shotTime;
     if (index === 3) {
@@ -466,153 +537,200 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
     return true;
   }
 
-  function missionScore(team, mission) {
+  function missionScore(team, mission, context = {}) {
     const safeTeam = normalizeTeam(team);
-    const point = getMissionPoint(mission);
+    const point = getMissionPoint(mission, rules.missions);
     if (!safeTeam || point === null) return { ok: false, code: "INVALID_COMMAND" };
-    syncTimerFromClock();
-    if (status === "FINISH") return { ok: false, code: "MATCH_FINISHED" };
+    syncTimerFromClock(context);
+    const guard = requireRunning();
+    if (guard) return guard;
     if (hasMissionShot(safeTeam, mission)) return { ok: false, code: "MISSION_ALREADY_RECORDED" };
-
     if (safeTeam === "A") scoreA += point;
     else scoreB += point;
     recordMissionShot(safeTeam, mission);
+    log("MISSION_SCORE", { team: safeTeam, mission: Number(mission), point }, context);
     emit();
     return { ok: true, point };
   }
 
-  function missionShot(team, mission) {
-    if (!normalizeTeam(team) || getMissionPoint(mission) === null) {
-      return { ok: false, code: "INVALID_COMMAND" };
-    }
-    if (!recordMissionShot(team, mission)) return { ok: false, code: "MISSION_NOT_RECORDABLE" };
-    emit();
-    return { ok: true };
-  }
-
-  function endWithBonus(team) {
+  function missionShot(team, mission, context = {}) {
     const safeTeam = normalizeTeam(team);
-    const point = getMissionPoint(4);
-    if (!safeTeam) return { ok: false, code: "INVALID_COMMAND" };
-    if (hasMissionShot(safeTeam, 4)) return { ok: false, code: "MISSION_ALREADY_RECORDED" };
-    if (!recordMissionShot(safeTeam, 4, true)) return { ok: false, code: "MISSION_NOT_RECORDABLE" };
-
-    if (safeTeam === "A") scoreA += point;
-    else scoreB += point;
-    if (status === "FINISH") updateCurrentMatchResult();
-    emit();
-    return { ok: true, point };
-  }
-
-  function resetScore() {
-    if (status === "RUNNING") return { ok: false, code: "MATCH_RUNNING" };
-    scoreA = 0;
-    scoreB = 0;
-    shotA = "";
-    shotB = "";
-    missionShotsA = ["", "", "", ""];
-    missionShotsB = ["", "", "", ""];
-    timeElapsed = 0;
-    status = "STOP";
-    resetCurrentMatchSave();
+    if (!safeTeam || getMissionPoint(mission, rules.missions) === null) return { ok: false, code: "INVALID_COMMAND" };
+    syncTimerFromClock(context);
+    const guard = requireRunning();
+    if (guard) return guard;
+    if (!recordMissionShot(safeTeam, mission)) return { ok: false, code: "MISSION_ALREADY_RECORDED" };
+    log("MISSION_SHOT", { team: safeTeam, mission: Number(mission) }, context);
     emit();
     return { ok: true };
   }
 
-  function resetAll() {
-    scoreA = 0;
-    scoreB = 0;
-    resetTimer(180);
+  function endWithBonus(team, context = {}) {
+    return missionScore(team, 4, context);
+  }
+
+  function correctResult(data, context = {}) {
+    if (status !== "FINISH" || !currentMatchSaved) return { ok: false, code: "RESULT_NOT_AVAILABLE" };
+    if (resultLocked) return { ok: false, code: "RESULT_LOCKED" };
+    const safe = data && typeof data === "object" ? data : {};
+    const type = String(safe.type || "");
+    const team = normalizeTeam(safe.team);
+    if (!team) return { ok: false, code: "INVALID_TEAM" };
+
+    if (type === "score") {
+      const delta = normalizeScoreDelta(safe.delta, rules.scoreAdjustments);
+      if (delta === null) return { ok: false, code: "INVALID_SCORE_DELTA" };
+      if (team === "A") scoreA = Math.max(scoreA + delta, 0);
+      else scoreB = Math.max(scoreB + delta, 0);
+      log("RESULT_CORRECT_SCORE", { team, delta }, context);
+    } else if (type === "shot") {
+      const value = normalizeCorrectionTime(safe.value, matchDuration);
+      if (value === null) return { ok: false, code: "INVALID_TIME" };
+      if (team === "A") shotA = value;
+      else shotB = value;
+      log("RESULT_CORRECT_SHOT", { team, value }, context);
+    } else if (type === "mission-shot") {
+      const mission = Number(safe.mission);
+      if (!Number.isInteger(mission) || mission < 1 || mission > 4) return { ok: false, code: "INVALID_MISSION" };
+      const value = normalizeCorrectionTime(safe.value, matchDuration);
+      if (value === null) return { ok: false, code: "INVALID_TIME" };
+      const shots = missionShotList(team);
+      shots[mission - 1] = value;
+      if (mission === 4) {
+        if (team === "A") shotA = value;
+        else shotB = value;
+      }
+      log("RESULT_CORRECT_MISSION_SHOT", { team, mission, value }, context);
+    } else {
+      return { ok: false, code: "INVALID_CORRECTION" };
+    }
+
+    updateCurrentMatchResult();
+    emit();
+    return { ok: true, result: currentResultFields() };
+  }
+
+  function finalizeResult(context = {}) {
+    if (status !== "FINISH" || !currentMatchSaved || !currentMatchSavedResultId) return { ok: false, code: "RESULT_NOT_AVAILABLE" };
+    if (resultLocked) return { ok: true, alreadyLocked: true };
+    resultLocked = true;
+    const index = matchResults.findIndex((item) => item && item.id === currentMatchSavedResultId);
+    if (index >= 0) {
+      matchResults[index] = {
+        ...matchResults[index],
+        ...currentResultFields(),
+        locked: true,
+        lockedAt: new Date().toISOString(),
+      };
+      saveResults();
+    }
+    log("RESULT_FINALIZED", { resultId: currentMatchSavedResultId }, context);
+    emit();
     return { ok: true };
   }
 
-  function addTeam(data) {
-    const name = addTeamNameToList(data && data.name);
+  function onlyReady() {
+    return status === "READY" ? null : { ok: false, code: "MATCH_NOT_READY" };
+  }
+
+  function addTeam(data, context = {}) {
+    const guard = onlyReady();
+    if (guard) return guard;
+    const name = cleanTeamName(data && data.name);
     if (!name) return { ok: false, code: "INVALID_TEAM_NAME" };
+    if (findTeamNameIndex(name) >= 0) return { ok: false, code: "TEAM_NAME_ALREADY_EXISTS" };
+    teamNames.push(name);
     const weight = normalizeTeamWeight(data && data.weight);
     if (weight !== null) setTeamWeight(name, weight);
     const school = cleanSchoolName(data && data.school);
     if (school) setTeamSchool(name, school);
     saveTeamData();
+    log("TEAM_ADD", { name }, context);
     emit();
     return { ok: true };
   }
 
-  function editTeam(data) {
+  function editTeam(data, context = {}) {
+    const guard = onlyReady();
+    if (guard) return guard;
     const oldName = cleanTeamName(data && data.oldName);
     const newName = cleanTeamName(data && data.newName);
     const index = findTeamNameIndex(oldName);
-    if (index < 0 || !newName) return { ok: false };
-
+    if (index < 0 || !newName) return { ok: false, code: "INVALID_TEAM_NAME" };
     const duplicate = findTeamNameIndex(newName);
-    if (duplicate >= 0 && duplicate !== index) {
-      if (data.weight !== undefined) setTeamWeight(teamNames[duplicate], data.weight);
-      if (data.school !== undefined) setTeamSchool(teamNames[duplicate], data.school);
-      if (teamNameA === teamNames[index]) teamNameA = teamNames[duplicate];
-      if (teamNameB === teamNames[index]) teamNameB = teamNames[duplicate];
-      delete teamWeights[teamNames[index]];
-      delete teamSchools[teamNames[index]];
-      teamNames.splice(index, 1);
-    } else {
-      const previous = teamNames[index];
-      const previousWeight = getTeamWeight(previous);
-      const previousSchool = getTeamSchool(previous);
-      teamNames[index] = newName;
-      delete teamWeights[previous];
-      delete teamSchools[previous];
-      setTeamWeight(newName, data.weight === undefined ? previousWeight : data.weight);
-      setTeamSchool(newName, data.school === undefined ? previousSchool : data.school);
-      if (teamNameA === previous) teamNameA = newName;
-      if (teamNameB === previous) teamNameB = newName;
-    }
+    if (duplicate >= 0 && duplicate !== index) return { ok: false, code: "TEAM_NAME_ALREADY_EXISTS" };
 
+    const previous = teamNames[index];
+    const previousWeight = getTeamWeight(previous);
+    const previousSchool = getTeamSchool(previous);
+    teamNames[index] = newName;
+    delete teamWeights[previous];
+    delete teamSchools[previous];
+    setTeamWeight(newName, data && data.weight === undefined ? previousWeight : data.weight);
+    setTeamSchool(newName, data && data.school === undefined ? previousSchool : data.school);
+    if (teamNameA === previous) teamNameA = newName;
+    if (teamNameB === previous) teamNameB = newName;
     saveTeamData();
+    log("TEAM_EDIT", { oldName: previous, newName }, context);
     emit();
     return { ok: true };
   }
 
-  function selectTeam(data) {
+  function selectTeam(data, context = {}) {
+    const guard = onlyReady();
+    if (guard) return guard;
     const team = normalizeTeam(data && data.team);
-    const selected = addTeamNameToList(data && data.name);
-    if (!team || !selected) return { ok: false };
+    const selectedIndex = findTeamNameIndex(data && data.name);
+    if (!team || selectedIndex < 0) return { ok: false, code: "INVALID_TEAM" };
+    const selected = teamNames[selectedIndex];
+    const other = team === "A" ? teamNameB : teamNameA;
+    if (selected === other) return { ok: false, code: "SAME_TEAM_BOTH_SIDES" };
     if (team === "A") teamNameA = selected;
     else teamNameB = selected;
     saveTeamData();
+    log("TEAM_SELECT", { side: team, name: selected }, context);
     emit();
     return { ok: true };
   }
 
-  function deleteTeam(data) {
+  function deleteTeam(data, context = {}) {
+    const guard = onlyReady();
+    if (guard) return guard;
     const name = cleanTeamName(data && data.name);
     const index = findTeamNameIndex(name);
-    if (index < 0 || teamNames.length <= 1) return { ok: false };
+    if (index < 0 || teamNames.length <= 2) return { ok: false, code: "TEAM_DELETE_NOT_ALLOWED" };
     const deleted = teamNames[index];
     teamNames.splice(index, 1);
     delete teamWeights[deleted];
     delete teamSchools[deleted];
-    if (teamNameA === deleted) teamNameA = teamNames.find((item) => item !== teamNameB) || teamNames[0] || "TEAM A";
-    if (teamNameB === deleted) teamNameB = teamNames.find((item) => item !== teamNameA) || teamNames[0] || "TEAM B";
+    if (teamNameA === deleted) teamNameA = teamNames.find((item) => item !== teamNameB) || teamNames[0];
+    if (teamNameB === deleted) teamNameB = teamNames.find((item) => item !== teamNameA) || teamNames[1] || teamNames[0];
+    ensureDistinctSelectedTeams();
     saveTeamData();
+    log("TEAM_DELETE", { name: deleted }, context);
     emit();
     return { ok: true };
   }
 
-  function setNamesVisible(visible) {
+  function setNamesVisible(visible, context = {}) {
     teamNamesVisible = Boolean(visible);
     saveTeamData();
+    log(teamNamesVisible ? "TEAM_NAMES_SHOW" : "TEAM_NAMES_HIDE", {}, context);
     emit();
     return { ok: true };
   }
 
-  function deleteResult(data) {
+  function deleteResult(data, context = {}) {
+    if (status === "RUNNING" || status === "PAUSED") return { ok: false, code: "MATCH_ACTIVE", deleted: false, matchResults };
     const id = String(data && data.id || "").trim();
-    if (!id) return { ok: false, deleted: false, matchResults };
+    if (!id) return { ok: false, code: "INVALID_RESULT", deleted: false, matchResults };
     const before = matchResults.length;
     matchResults = matchResults.filter((item) => item && item.id !== id);
     const deleted = before !== matchResults.length;
     if (deleted) {
       if (currentMatchSavedResultId === id) resetCurrentMatchSave();
       saveResults();
+      log("RESULT_DELETE", { resultId: id }, context);
       emit();
     }
     return { ok: deleted, deleted, matchResults };
@@ -622,25 +740,36 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
     await persistence.ensureDirectories();
     await loadTeamData();
     await loadResults();
-    await loadLiveState();
+    const recovery = await loadLiveState();
     saveTeamData();
     saveResults();
     persist(true);
     await persistence.flushAll();
+    log("SERVER_READY", { recovery, rules });
+    await eventLog.flush();
   }
 
-  async function shutdown() {
-    if (status === "RUNNING") syncTimerFromClock();
+  async function shutdown(context = {}) {
+    if (status === "RUNNING") {
+      syncTimerFromClock(context);
+      if (status === "RUNNING") status = "PAUSED";
+    }
     clearTimer();
+    log("SERVER_SHUTDOWN", {}, context);
     persist(false);
+    await Promise.all([persistence.flushAll(), eventLog.flush()]);
+  }
+
+  async function forcePersist() {
+    persist(true);
     await persistence.flushAll();
   }
 
   return {
     initialize,
     shutdown,
+    forcePersist,
     getUpdateData: updateData,
-    forcePersist: () => persist(true),
     addScore,
     missionScore,
     missionShot,
@@ -650,13 +779,16 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {} }) {
     stopTimer,
     resetScore,
     resetAll,
+    correctResult,
+    finalizeResult,
     addTeam,
     editTeam,
     selectTeam,
     deleteTeam,
     setNamesVisible,
     deleteResult,
+    recordEvent: log,
   };
 }
 
-module.exports = { createScoreboard };
+module.exports = { createScoreboard, STATUSES };

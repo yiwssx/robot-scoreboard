@@ -1,8 +1,5 @@
 "use strict";
 
-const ALLOWED_SCORE_DELTAS = new Set([-20, -10, 10, 20]);
-const MISSION_POINTS = Object.freeze({ 1: 10, 2: 20, 3: 20, 4: 20 });
-
 function cleanTeamName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").slice(0, 80);
 }
@@ -15,16 +12,16 @@ function normalizeTeamWeight(value) {
   if (value === "" || value === null || value === undefined) return null;
   const weight = Number(value);
   if (!Number.isFinite(weight) || weight <= 0) return null;
-  const roundedWeight = Math.round(weight * 10) / 10;
-  return roundedWeight > 0 ? roundedWeight : null;
+  const rounded = Math.round(weight * 10) / 10;
+  return rounded > 0 ? rounded : null;
 }
 
 function normalizeMissionShots(value) {
   const shots = Array.isArray(value) ? value : [];
   return [0, 1, 2, 3].map((index) => {
-    const shotValue = shots[index];
-    if (shotValue === "" || shotValue === null || shotValue === undefined) return "";
-    return String(shotValue);
+    const shot = shots[index];
+    if (shot === "" || shot === null || shot === undefined) return "";
+    return String(shot);
   });
 }
 
@@ -37,21 +34,32 @@ function parseShotTime(value) {
   return minutes * 60 + seconds;
 }
 
+function normalizeCorrectionTime(value, maxSeconds) {
+  if (value === "" || value === null || value === undefined) return "";
+  const seconds = parseShotTime(value);
+  if (seconds === null) return null;
+  if (Number.isFinite(Number(maxSeconds)) && seconds > Number(maxSeconds)) return null;
+  return formatTime(seconds);
+}
+
 function formatTime(seconds) {
-  const safeSeconds = Math.max(Math.floor(Number(seconds) || 0), 0);
-  const minutes = Math.floor(safeSeconds / 60);
-  const remainingSeconds = safeSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}.${String(remainingSeconds).padStart(2, "0")}`;
+  const safe = Math.max(Math.floor(Number(seconds) || 0), 0);
+  const minutes = Math.floor(safe / 60);
+  const remaining = safe % 60;
+  return `${String(minutes).padStart(2, "0")}.${String(remaining).padStart(2, "0")}`;
 }
 
-function normalizeScoreDelta(value) {
+function normalizeScoreDelta(value, allowedValues = [-20, -10, 10, 20]) {
   const point = Number(value);
-  return Number.isFinite(point) && ALLOWED_SCORE_DELTAS.has(point) ? point : null;
+  const allowed = new Set((Array.isArray(allowedValues) ? allowedValues : []).map(Number));
+  return Number.isFinite(point) && allowed.has(point) ? point : null;
 }
 
-function getMissionPoint(mission) {
+function getMissionPoint(mission, missionPoints = { 1: 10, 2: 20, 3: 20, 4: 20 }) {
   const missionNumber = Number(mission);
-  return Number.isInteger(missionNumber) ? MISSION_POINTS[missionNumber] ?? null : null;
+  if (!Number.isInteger(missionNumber) || missionNumber < 1 || missionNumber > 4) return null;
+  const point = Number(missionPoints[missionNumber]);
+  return Number.isFinite(point) && point >= 0 ? point : null;
 }
 
 function normalizeTeam(value) {
@@ -73,41 +81,37 @@ function elapsedSecondsFromClock(baseElapsedMs, startedAtNs, nowNs, durationSeco
   return Math.floor(Math.min(base + deltaMs, durationMs) / 1000);
 }
 
-function getWinnerInfoFromValues(firstScore, secondScore, firstShot, secondShot, firstWeight, secondWeight, firstName, secondName) {
-  const safeScoreA = Number(firstScore) || 0;
-  const safeScoreB = Number(secondScore) || 0;
+function getWinnerInfoFromValues(scoreA, scoreB, shotA, shotB, weightA, weightB, nameA, nameB) {
+  const a = Number(scoreA) || 0;
+  const b = Number(scoreB) || 0;
+  if (a > b) return { winner: "A", winnerName: nameA || "TEAM A" };
+  if (b > a) return { winner: "B", winnerName: nameB || "TEAM B" };
 
-  if (safeScoreA > safeScoreB) return { winner: "A", winnerName: firstName || "TEAM A" };
-  if (safeScoreB > safeScoreA) return { winner: "B", winnerName: secondName || "TEAM B" };
-
-  const shotSecondsA = parseShotTime(firstShot);
-  const shotSecondsB = parseShotTime(secondShot);
-
+  const shotSecondsA = parseShotTime(shotA);
+  const shotSecondsB = parseShotTime(shotB);
   if (shotSecondsA !== null && shotSecondsB !== null) {
-    if (shotSecondsA < shotSecondsB) return { winner: "A", winnerName: firstName || "TEAM A" };
-    if (shotSecondsB < shotSecondsA) return { winner: "B", winnerName: secondName || "TEAM B" };
+    if (shotSecondsA < shotSecondsB) return { winner: "A", winnerName: nameA || "TEAM A" };
+    if (shotSecondsB < shotSecondsA) return { winner: "B", winnerName: nameB || "TEAM B" };
   }
 
-  const safeWeightA = normalizeTeamWeight(firstWeight);
-  const safeWeightB = normalizeTeamWeight(secondWeight);
+  const safeWeightA = normalizeTeamWeight(weightA);
+  const safeWeightB = normalizeTeamWeight(weightB);
   const equalShots = shotSecondsA !== null && shotSecondsB !== null && shotSecondsA === shotSecondsB;
-
   if (equalShots && safeWeightA !== null && safeWeightB !== null) {
-    if (safeWeightA < safeWeightB) return { winner: "A", winnerName: firstName || "TEAM A" };
-    if (safeWeightB < safeWeightA) return { winner: "B", winnerName: secondName || "TEAM B" };
+    if (safeWeightA < safeWeightB) return { winner: "A", winnerName: nameA || "TEAM A" };
+    if (safeWeightB < safeWeightA) return { winner: "B", winnerName: nameB || "TEAM B" };
   }
 
   return { winner: "DRAW", winnerName: "DRAW" };
 }
 
 module.exports = {
-  ALLOWED_SCORE_DELTAS,
-  MISSION_POINTS,
   cleanTeamName,
   cleanSchoolName,
   normalizeTeamWeight,
   normalizeMissionShots,
   parseShotTime,
+  normalizeCorrectionTime,
   formatTime,
   normalizeScoreDelta,
   getMissionPoint,
