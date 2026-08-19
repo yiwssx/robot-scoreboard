@@ -7,6 +7,7 @@ const PAGE_FILES = Object.freeze({
   teamA: path.join("pages", "team-a.html"),
   teamB: path.join("pages", "team-b.html"),
   teams: path.join("pages", "team-names.html"),
+  status: path.join("pages", "status.html"),
 });
 
 function createPagesController({ publicDir }) {
@@ -24,6 +25,7 @@ function createPagesController({ publicDir }) {
     teamA: send("teamA"),
     teamB: send("teamB"),
     teams: send("teams"),
+    status: send("status"),
   };
 }
 

@@ -5,6 +5,7 @@ const { Server } = require("socket.io");
 const { loadEnvironment } = require("./src/config/env");
 const { loadCompetitionRules } = require("./src/config/competition-rules");
 const { createScoreboard } = require("./src/services/scoreboard.service");
+const { createFieldReadiness } = require("./src/infrastructure/diagnostics/field-readiness");
 const { createApp } = require("./src/http/app");
 const { registerSockets } = require("./src/sockets");
 
@@ -21,7 +22,13 @@ const scoreboard = createScoreboard({
   },
 });
 
-const app = createApp({ scoreboard, publicDir: env.publicDir });
+const fieldReadiness = createFieldReadiness({
+  dataDir: env.dataDir,
+  obsDir: env.obsDir,
+  rulesPath: env.rulesPath,
+  publicDir: env.publicDir,
+});
+const app = createApp({ scoreboard, publicDir: env.publicDir, fieldReadiness });
 const server = http.createServer(app);
 io = new Server(server);
 registerSockets(io, scoreboard);
@@ -32,6 +39,7 @@ async function bootstrap() {
     console.log(`Robot Scoreboard running on http://${env.host}:${env.port}`);
     console.log("Mode: offline / trusted LAN (no authentication)");
     console.log(`Rules: ${env.rulesPath}`);
+    console.log(`Field status: http://localhost:${env.port}/status`);
   });
 }
 

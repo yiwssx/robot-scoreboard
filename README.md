@@ -10,51 +10,26 @@
 robot-scoreboard/
 ├─ server.js                         # composition root / process lifecycle
 ├─ src/
-│  ├─ application/
-│  │  ├─ scoreboard-state.js        # in-memory state model
-│  │  └─ scoreboard-runtime.js      # projections, persistence orchestration, events
-│  ├─ config/
-│  │  ├─ env.js                     # runtime environment
-│  │  └─ competition-rules.js       # validated competition rules
-│  ├─ domain/
-│  │  ├─ team.js
-│  │  ├─ time.js
-│  │  ├─ scoring.js
-│  │  ├─ result.js
-│  │  └─ index.js
-│  ├─ services/
-│  │  ├─ scoreboard.service.js      # service composition / public facade
-│  │  ├─ match.service.js           # state machine + timer + recovery
-│  │  ├─ scoring.service.js         # score / mission operations
-│  │  ├─ team.service.js            # team setup operations
-│  │  └─ result.service.js          # history / review / correction / finalize
-│  ├─ http/
-│  │  ├─ app.js
-│  │  ├─ controllers/
-│  │  ├─ middleware/
-│  │  └─ routes/
-│  ├─ sockets/
-│  │  ├─ index.js
-│  │  ├─ match.socket.js
-│  │  ├─ scoring.socket.js
-│  │  ├─ team.socket.js
-│  │  └─ result.socket.js
+│  ├─ application/                   # in-memory state + runtime orchestration
+│  ├─ config/                        # env + competition rules
+│  ├─ domain/                        # pure team/time/scoring/result rules
+│  ├─ services/                      # match/scoring/team/result use cases
+│  ├─ http/                          # app/routes/controllers/middleware
+│  ├─ sockets/                       # Socket.IO transport modules
 │  └─ infrastructure/
-│     ├─ persistence/file-store.js
-│     └─ logging/event-log.js
+│     ├─ persistence/
+│     ├─ logging/
+│     └─ diagnostics/                # field-readiness checks
 ├─ public/
-│  ├─ pages/                         # HTML markup only
+│  ├─ pages/
 │  ├─ css/
-│  │  ├─ brand.css
-│  │  └─ pages/
 │  ├─ js/
-│  │  ├─ common/
-│  │  └─ pages/
 │  └─ assets/
 ├─ config/competition-rules.json
 ├─ data/
 ├─ obs/
 ├─ scripts/
+├─ docs/
 └─ test/
 ```
 
@@ -71,8 +46,6 @@ Socket.IO transports ────┤
 services/application ──► infrastructure
 ```
 
-Domain modules ไม่ import Express, Socket.IO, filesystem, OBS หรือ HTML. ไฟล์ entrypoint เดิมใน `src/*.js` บางรายการคงไว้เป็น thin compatibility facade เพื่อไม่ให้ scripts/tests หรือ consumer เดิมแตก.
-
 ## หลักการใช้งานสนาม
 
 - ไม่มี login, token, cloud service หรือ Internet dependency ตอนใช้งานสนาม
@@ -80,7 +53,7 @@ Domain modules ไม่ import Express, Socket.IO, filesystem, OBS หรือ
 - Control เป็นศูนย์ควบคุมเวลา/reset/result review
 - Team A/B ใช้บันทึกคะแนนและภารกิจของฝั่งตัวเอง
 - Business rules และ validation อยู่ฝั่ง server
-- Runtime data ไม่ถูก commit ลง Git
+- Runtime data และ backup ไม่ถูก commit ลง Git
 
 ## URLs
 
@@ -90,9 +63,35 @@ Canonical routes:
 - Team A: `http://localhost:3000/team/a`
 - Team B: `http://localhost:3000/team/b`
 - Team setup: `http://localhost:3000/teams`
+- Field status: `http://localhost:3000/status`
 - Health check: `http://localhost:3000/healthz`
+- Field status API: `http://localhost:3000/api/field-status`
 
-URL เดิม `/control.html`, `/team-a.html`, `/team-b.html`, `/team-names.html` ยังรองรับโดย redirect ไป canonical route เพื่อ compatibility.
+URL เดิม `/control.html`, `/team-a.html`, `/team-b.html`, `/team-names.html`, `/status.html` รองรับด้วย redirect ไป canonical route.
+
+## Field readiness
+
+หน้า `/status` ตรวจ readiness ของเครื่องแม่แบบ read-only ต่อ state การแข่งขัน และ active-write probe เฉพาะ temporary file สำหรับ path ที่ต้องเขียนจริง:
+
+- `data/` เขียนได้
+- `obs/` เขียนได้
+- `config/competition-rules.json` อ่านและ parse ได้
+- page files หลักอยู่ครบ
+- disk free space ของ `data/` และ `obs/`
+- hostname / Node / platform
+- IPv4 interfaces สำหรับ LAN สนาม
+- scoreboard status, team A/B, result lock และเวลา
+
+ถ้า critical check ไม่ผ่าน `/api/field-status` ตอบ HTTP `503` เพื่อไม่ให้ระบบถูกตีความว่า ready โดยผิดพลาด.
+
+บน Offline Windows package ใช้:
+
+```text
+FIELD-CHECK.cmd
+OPEN-FIELD-STATUS.cmd
+```
+
+`FIELD-CHECK.cmd` ตรวจ diagnostics และ HTTP routes หลักทั้งหมด. อย่างไรก็ตาม machine readiness ไม่แทนการทดสอบ OBS, LAN clients, audio และ power recovery บนอุปกรณ์จริง.
 
 ## State machine
 
@@ -107,7 +106,7 @@ RESET ALL ใช้ไม่ได้ขณะ RUNNING/PAUSED
 หลัง FINISH ต้องยืนยันผลก่อนเริ่มคู่ใหม่
 ```
 
-ถ้า server/เครื่อง restart ระหว่าง `RUNNING` ระบบ restore คะแนนและเวลาเท่าที่ persist ล่าสุด แล้วกลับมาเป็น `PAUSED` เพื่อไม่ให้เวลาเดินต่อเอง.
+ถ้า server/เครื่อง restart ระหว่าง `RUNNING` ระบบ restore คะแนนและเวลาเท่าที่ persist ล่าสุด แล้วกลับมาเป็น `PAUSED`.
 
 ## Competition rules
 
@@ -122,18 +121,7 @@ RESET ALL ใช้ไม่ได้ขณะ RUNNING/PAUSED
 }
 ```
 
-ค่าทั้งหมดถูก validate ก่อนใช้ และ fallback เป็นค่า default หากไฟล์เสีย.
-
-## Run สำหรับเครื่องพัฒนา
-
-ต้องใช้ Node.js 20 ขึ้นไป:
-
-```bash
-npm ci
-npm start
-```
-
-เครื่องอื่นใน LAN ใช้ IP ของเครื่อง server เช่น `http://192.168.1.10:3000/team/a`.
+ค่าทั้งหมดถูก validate ก่อนใช้ และ fallback เป็นค่า default หากไฟล์เสีย; `/status` จะยังเตือนว่าไฟล์ rules ไม่พร้อมเมื่อ JSON parse ไม่ได้.
 
 ## Human-error protection
 
@@ -156,13 +144,9 @@ npm start
 
 เมื่อผลถูกล็อกแล้วจึง RESET เพื่อเตรียมคู่ถัดไปได้.
 
-## Event log
-
-ทุก action สำคัญ append ลง `data/event-log.ndjson` เช่น `MATCH_START`, `MATCH_PAUSE`, `SCORE_ADJUST`, `MISSION_SCORE`, `RESULT_CORRECT_SCORE`, `RESULT_FINALIZED`, `ACTION_REJECTED` พร้อม elapsed time, score state และ client context เมื่อมีข้อมูล.
-
 ## Persistence / OBS
 
-Persistent JSON:
+Persistent data:
 
 ```text
 data/team-names.json
@@ -189,7 +173,25 @@ obs/nameschool-b.text
 
 การเขียนไฟล์เป็น asynchronous, debounced, atomic และเขียน OBS เฉพาะค่าที่เปลี่ยน พร้อม retry สำหรับ `EBUSY` / `EPERM` / `EACCES` / `EEXIST` บน Windows.
 
-## Tests
+## Backup / Restore
+
+Offline Windows package มี:
+
+```text
+BACKUP-SCOREBOARD.cmd
+RESTORE-SCOREBOARD.cmd
+```
+
+Backup เก็บ `data/`, `obs/`, `config/` พร้อม `manifest.json` ลง `backups/<timestamp>-<label>`.
+
+Restore มี safety guard:
+
+1. ต้องหยุด scoreboard ก่อน; ถ้า TCP 3000 ยัง LISTENING จะ reject
+2. ต้องมี `manifest.json`, `data/`, `obs/`, `config/` ครบ
+3. ก่อนเขียนทับ จะสร้าง `pre-restore` backup ของ current state อัตโนมัติ
+4. หลัง restore ต้อง start server และตรวจ `/status` ก่อนกลับเข้าสนาม
+
+## Tests / CI
 
 ```bash
 npm run check
@@ -198,23 +200,49 @@ npm run stress:obs
 npm audit --audit-level=high
 ```
 
-`npm run check` ตรวจ JavaScript ทุกไฟล์ใน `src/`, `public/js/`, `scripts/` และ `server.js`. Test suite ครอบคลุม domain, match state/recovery/result integrity, persistence และ HTTP canonical/legacy routes.
+CI ตรวจ Node 20/22 บน Linux. Windows field-validation เพิ่มการตรวจ:
 
-CI ตรวจ Node 20/22 บน Linux และ `windows-latest` รัน tests, OBS stress พร้อม concurrent readers, สร้าง Offline Windows ZIP และ audit.
+- tests และ OBS stress
+- start server จริงและรัน field route/readiness self-test
+- backup → mutate → restore พร้อมตรวจ pre-restore backup
+- สร้าง Offline Windows ZIP
+- verify ว่า ZIP stage มี START/STOP/FIELD-CHECK/BACKUP/RESTORE และ status assets ครบ
+- audit
 
 ## Offline Windows package
 
-Workflow **Build Offline Windows Package** สร้าง `robot-scoreboard-windows-x64.zip` ที่มี `node.exe`, dependencies และไฟล์ระบบครบ ไม่ต้องติดตั้ง Node.js หรือ `npm install` ที่สนาม. หลังแตก ZIP ให้ดับเบิลคลิก `START-SCOREBOARD.cmd`; ระบบจะเปิด Control ที่ `/control`.
-
-สร้างจาก Windows เองได้ด้วย:
+สร้างด้วย:
 
 ```powershell
 npm ci --omit=dev
 powershell -ExecutionPolicy Bypass -File scripts/build-offline-windows.ps1
 ```
 
+แพ็กเกจมี `node.exe` และ dependencies ครบ ไม่ต้องติดตั้ง Node.js หรือ `npm install` ที่สนาม.
+
+ไฟล์หลักที่ operator ใช้:
+
+```text
+START-SCOREBOARD.cmd
+STOP-SCOREBOARD.cmd
+FIELD-CHECK.cmd
+OPEN-FIELD-STATUS.cmd
+BACKUP-SCOREBOARD.cmd
+RESTORE-SCOREBOARD.cmd
+```
+
+## Field acceptance / release freeze
+
+ก่อนประกาศ release ว่า **Field Approved** ต้องใช้เครื่อง/OBS/network/audio จริงและทำ checklist:
+
+```text
+docs/FIELD-ACCEPTANCE-CHECKLIST.md
+```
+
+ขั้นต่ำควรผ่าน 10–20 match endurance, restart/power-loss recovery, OBS reopen/read contention, LAN reconnect, audio warning และ backup/restore drill. หลัง freeze ไม่ควร refactor หรือ update dependency ก่อนวันแข่ง เว้นแต่แก้ defect ที่ยืนยันแล้วและ rerun checklist ที่เกี่ยวข้อง.
+
 ## Migration จากเวอร์ชันเดิม
 
 ก่อนอัปเดตเครื่องสนาม ให้สำรอง `obs/` เดิมหนึ่งครั้ง. ระบบยังอ่าน legacy JSON จาก `obs/` ได้เมื่อยังไม่มีไฟล์ใหม่ใน `data/` แล้ว persist ต่อในโครงสร้างใหม่.
 
-`node_modules/`, `data/*`, `obs/*`, log และ `dist/` ถูก ignore จาก Git โดยตั้งใจ.
+`node_modules/`, `data/*`, `obs/*`, `backups/`, log และ `dist/` ถูก ignore จาก Git โดยตั้งใจ.

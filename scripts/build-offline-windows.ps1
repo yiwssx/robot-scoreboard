@@ -9,11 +9,14 @@ $Zip = Join-Path $OutputDir "robot-scoreboard-windows-x64.zip"
 
 if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
 if (Test-Path $Zip) { Remove-Item $Zip -Force }
-New-Item -ItemType Directory -Force -Path $Stage, (Join-Path $Stage "runtime"), (Join-Path $Stage "data"), (Join-Path $Stage "obs") | Out-Null
+New-Item -ItemType Directory -Force -Path $Stage, (Join-Path $Stage "runtime"), (Join-Path $Stage "data"), (Join-Path $Stage "obs"), (Join-Path $Stage "backups"), (Join-Path $Stage "scripts") | Out-Null
 
 $copyItems = @("server.js", "package.json", "package-lock.json", "README.md", "public", "src", "config", "node_modules")
 foreach ($item in $copyItems) {
   Copy-Item (Join-Path $Root $item) -Destination $Stage -Recurse -Force
+}
+foreach ($scriptName in @("backup-scoreboard.ps1", "restore-scoreboard.ps1", "field-check.ps1")) {
+  Copy-Item (Join-Path $Root "scripts\$scriptName") -Destination (Join-Path $Stage "scripts\$scriptName") -Force
 }
 
 $nodeExe = (Get-Command node.exe).Source
@@ -39,17 +42,56 @@ endlocal
 '@ | Set-Content -Path (Join-Path $Stage "STOP-SCOREBOARD.cmd") -Encoding ASCII
 
 @'
+@echo off
+setlocal
+cd /d "%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\backup-scoreboard.ps1" -Root "%~dp0"
+pause
+endlocal
+'@ | Set-Content -Path (Join-Path $Stage "BACKUP-SCOREBOARD.cmd") -Encoding ASCII
+
+@'
+@echo off
+setlocal
+cd /d "%~dp0"
+echo STOP-SCOREBOARD.cmd must be run before restore.
+set /p BACKUP_PATH=Backup folder path: 
+if "%BACKUP_PATH%"=="" exit /b 2
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\restore-scoreboard.ps1" -Root "%~dp0" -BackupPath "%BACKUP_PATH%"
+pause
+endlocal
+'@ | Set-Content -Path (Join-Path $Stage "RESTORE-SCOREBOARD.cmd") -Encoding ASCII
+
+@'
+@echo off
+setlocal
+cd /d "%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\field-check.ps1"
+pause
+endlocal
+'@ | Set-Content -Path (Join-Path $Stage "FIELD-CHECK.cmd") -Encoding ASCII
+
+@'
+@echo off
+start "" "http://localhost:3000/status"
+'@ | Set-Content -Path (Join-Path $Stage "OPEN-FIELD-STATUS.cmd") -Encoding ASCII
+
+@'
 ROBOT SCOREBOARD - OFFLINE WINDOWS PACKAGE
 
 1. แตก ZIP ลงเครื่องแม่
 2. ดับเบิลคลิก START-SCOREBOARD.cmd
 3. Control: http://localhost:3000/control
-4. Team A: http://IP-เครื่องแม่:3000/team/a
-5. Team B: http://IP-เครื่องแม่:3000/team/b
-6. Team setup: http://IP-เครื่องแม่:3000/teams
-7. ไม่ต้องติดตั้ง Node.js และไม่ต้อง npm install
-8. เก็บโฟลเดอร์ data/ และ obs/ ไว้เมื่ออัปเดตเวอร์ชัน
-9. ห้าม port-forward TCP 3000 ออก Internet
+4. Field Status: http://localhost:3000/status
+5. Team A: http://IP-เครื่องแม่:3000/team/a
+6. Team B: http://IP-เครื่องแม่:3000/team/b
+7. Team setup: http://IP-เครื่องแม่:3000/teams
+8. FIELD-CHECK.cmd = ตรวจ machine readiness
+9. BACKUP-SCOREBOARD.cmd = สำรอง data/obs/config
+10. RESTORE-SCOREBOARD.cmd = กู้ backup (ต้อง STOP server ก่อน)
+11. ไม่ต้องติดตั้ง Node.js และไม่ต้อง npm install
+12. เก็บ data/, obs/ และ backups/ ไว้เมื่ออัปเดตเวอร์ชัน
+13. ห้าม port-forward TCP 3000 ออก Internet
 '@ | Set-Content -Path (Join-Path $Stage "README-OFFLINE.txt") -Encoding UTF8
 
 Compress-Archive -Path (Join-Path $Stage "*") -DestinationPath $Zip -CompressionLevel Optimal
