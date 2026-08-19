@@ -27,7 +27,7 @@ set HOST=0.0.0.0
 set PORT=3000
 start "Robot Scoreboard" "%~dp0runtime\node.exe" "%~dp0server.js"
 timeout /t 2 /nobreak >nul
-start "" "http://localhost:3000/control.html"
+start "" "http://localhost:3000/control"
 endlocal
 '@ | Set-Content -Path (Join-Path $Stage "START-SCOREBOARD.cmd") -Encoding ASCII
 
@@ -43,11 +43,13 @@ ROBOT SCOREBOARD - OFFLINE WINDOWS PACKAGE
 
 1. แตก ZIP ลงเครื่องแม่
 2. ดับเบิลคลิก START-SCOREBOARD.cmd
-3. Control: http://localhost:3000/control.html
-4. เครื่องอื่นใน LAN เข้า http://IP-เครื่องแม่:3000/
-5. ไม่ต้องติดตั้ง Node.js และไม่ต้อง npm install
-6. เก็บโฟลเดอร์ data/ และ obs/ ไว้เมื่ออัปเดตเวอร์ชัน
-7. ห้าม port-forward TCP 3000 ออก Internet
+3. Control: http://localhost:3000/control
+4. Team A: http://IP-เครื่องแม่:3000/team/a
+5. Team B: http://IP-เครื่องแม่:3000/team/b
+6. Team setup: http://IP-เครื่องแม่:3000/teams
+7. ไม่ต้องติดตั้ง Node.js และไม่ต้อง npm install
+8. เก็บโฟลเดอร์ data/ และ obs/ ไว้เมื่ออัปเดตเวอร์ชัน
+9. ห้าม port-forward TCP 3000 ออก Internet
 '@ | Set-Content -Path (Join-Path $Stage "README-OFFLINE.txt") -Encoding UTF8
 
 Compress-Archive -Path (Join-Path $Stage "*") -DestinationPath $Zip -CompressionLevel Optimal

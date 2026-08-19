@@ -1,0 +1,30 @@
+"use strict";
+
+const path = require("node:path");
+
+const PAGE_FILES = Object.freeze({
+  control: path.join("pages", "control.html"),
+  teamA: path.join("pages", "team-a.html"),
+  teamB: path.join("pages", "team-b.html"),
+  teams: path.join("pages", "team-names.html"),
+});
+
+function createPagesController({ publicDir }) {
+  function send(pageKey) {
+    return function sendPage(req, res) {
+      res.sendFile(path.join(publicDir, PAGE_FILES[pageKey]));
+    };
+  }
+
+  return {
+    index(req, res) {
+      res.redirect("/control");
+    },
+    control: send("control"),
+    teamA: send("teamA"),
+    teamB: send("teamB"),
+    teams: send("teams"),
+  };
+}
+
+module.exports = { createPagesController, PAGE_FILES };

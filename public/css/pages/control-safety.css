@@ -1,0 +1,87 @@
+#fieldResultReview {
+  text-align: left;
+  border: 1px solid rgba(255, 204, 0, 0.28);
+  border-radius: 10px;
+  margin-top: 16px;
+}
+
+#fieldResultReview[hidden] {
+  display: none !important;
+}
+
+.fs-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.fs-badge {
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #6f4d00;
+  color: #fff4bf;
+  font-weight: 900;
+}
+
+.fs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.fs-card {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.fs-card h3 {
+  margin: 0 0 10px;
+  color: #fff;
+}
+
+.fs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 8px 0;
+  align-items: center;
+}
+
+.fs-row button {
+  min-width: 72px;
+  min-height: 42px;
+  padding: 8px 12px;
+  font-size: 16px;
+}
+
+.fs-row input,
+.fs-row select {
+  min-height: 42px;
+  padding: 8px;
+  font-size: 16px;
+  border-radius: 6px;
+}
+
+.fs-current {
+  color: #ffe072;
+  font-weight: 800;
+}
+
+#fsFinalize {
+  width: 100%;
+  min-height: 54px;
+  margin-top: 12px;
+  background: #16794a;
+  font-size: 20px;
+}
+
+@media (max-width: 760px) {
+  .fs-grid {
+    grid-template-columns: 1fr;
+  }
+}
