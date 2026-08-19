@@ -762,7 +762,7 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: supplie
 
   async function forcePersist() {
     persist(true);
-    await persistence.flushAll();
+    await Promise.all([persistence.flushAll(), eventLog.flush()]);
   }
 
   return {
