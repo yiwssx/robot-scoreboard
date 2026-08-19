@@ -28,15 +28,15 @@ async function withServer(run) {
 
 test("canonical HTTP routes serve organized pages and health", async () => {
   await withServer(async (baseUrl) => {
-    const health = await fetch(`${baseUrl}/healthz`);
-    assert.equal(health.status, 200);
-    assert.deepEqual(await health.json(), {
-      ok: true,
-      mode: "offline-lan",
-      status: "READY",
-      resultLocked: false,
-      uptimeSeconds: (await Promise.resolve()).constructor ? Math.floor(process.uptime()) : 0,
-    });
+    const response = await fetch(`${baseUrl}/healthz`);
+    assert.equal(response.status, 200);
+    const health = await response.json();
+    assert.equal(health.ok, true);
+    assert.equal(health.mode, "offline-lan");
+    assert.equal(health.status, "READY");
+    assert.equal(health.resultLocked, false);
+    assert.equal(Number.isInteger(health.uptimeSeconds), true);
+    assert.equal(health.uptimeSeconds >= 0, true);
   });
 });
 
