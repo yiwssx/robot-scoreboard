@@ -1,16 +1,20 @@
 {
   "name": "robot-scoreboard",
-  "version": "1.0.0",
-  "description": "",
+  "version": "2.0.0",
+  "description": "Realtime competition scoreboard for VEC Service Intelligence Robot",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "check": "node --check server.js && node --check src/domain.js",
+    "test": "node --test test/*.test.js"
   },
-  "keywords": [],
+  "keywords": ["scoreboard", "robot", "socket.io", "obs"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "express": "^5.2.1",
     "socket.io": "^4.8.3"
