@@ -38,4 +38,5 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run stress:obs
+      - run: npm run build:offline:windows
       - run: npm audit --audit-level=high
