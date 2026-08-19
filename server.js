@@ -1,79 +1,37 @@
 "use strict";
 
-const express = require("express");
 const http = require("node:http");
-const fs = require("node:fs/promises");
-const path = require("node:path");
 const { Server } = require("socket.io");
-const { createScoreboard } = require("./src/scoreboard");
-const { registerSocketHandlers } = require("./src/socket-handlers");
-const { loadCompetitionRules } = require("./src/rules");
+const { loadEnvironment } = require("./src/config/env");
+const { loadCompetitionRules } = require("./src/config/competition-rules");
+const { createScoreboard } = require("./src/services/scoreboard.service");
+const { createApp } = require("./src/http/app");
+const { registerSockets } = require("./src/sockets");
 
-const PORT = Number(process.env.PORT) || 3000;
-const HOST = String(process.env.HOST || "0.0.0.0");
-const DATA_DIR = process.env.SCOREBOARD_DATA_DIR || path.join(__dirname, "data");
-const OBS_DIR = process.env.SCOREBOARD_OBS_DIR || path.join(__dirname, "obs");
-const RULES_PATH = process.env.SCOREBOARD_RULES || path.join(__dirname, "config", "competition-rules.json");
-const SAFE_HTML_PAGES = new Set(["/control.html", "/team-a.html", "/team-b.html", "/team-names.html"]);
+const env = loadEnvironment(__dirname);
+const rules = loadCompetitionRules(env.rulesPath);
 
-const rules = loadCompetitionRules(RULES_PATH);
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-
-app.use((req, res, next) => {
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "SAMEORIGIN");
-  res.setHeader("Referrer-Policy", "no-referrer");
-  if (/\.(?:html|css|js)$/i.test(req.path)) {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-  }
-  next();
-});
-
+let io = null;
 const scoreboard = createScoreboard({
-  dataDir: DATA_DIR,
-  obsDir: OBS_DIR,
+  dataDir: env.dataDir,
+  obsDir: env.obsDir,
   rules,
-  onUpdate: (data) => io.emit("update", data),
+  onUpdate: (data) => {
+    if (io) io.emit("update", data);
+  },
 });
 
-app.get("/healthz", (req, res) => {
-  const data = scoreboard.getUpdateData();
-  res.json({
-    ok: true,
-    mode: "offline-lan",
-    status: data.status,
-    resultLocked: data.resultLocked,
-    uptimeSeconds: Math.floor(process.uptime()),
-  });
-});
-
-app.get("/", (req, res) => res.redirect("/control.html"));
-
-// Keep the original HTML files intact while injecting the field-safety layer.
-app.get(Array.from(SAFE_HTML_PAGES), async (req, res, next) => {
-  try {
-    const filePath = path.join(__dirname, "public", path.basename(req.path));
-    let html = await fs.readFile(filePath, "utf8");
-    html = html.replace(/<\/body>/i, '<script src="/field-safety.js"></script></body>');
-    res.type("html").send(html);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.use(express.static(path.join(__dirname, "public")));
-registerSocketHandlers(io, scoreboard);
+const app = createApp({ scoreboard, publicDir: env.publicDir });
+const server = http.createServer(app);
+io = new Server(server);
+registerSockets(io, scoreboard);
 
 async function bootstrap() {
   await scoreboard.initialize();
-  server.listen(PORT, HOST, () => {
-    console.log(`Robot Scoreboard running on http://${HOST}:${PORT}`);
+  server.listen(env.port, env.host, () => {
+    console.log(`Robot Scoreboard running on http://${env.host}:${env.port}`);
     console.log("Mode: offline / trusted LAN (no authentication)");
-    console.log(`Rules: ${RULES_PATH}`);
+    console.log(`Rules: ${env.rulesPath}`);
   });
 }
 
