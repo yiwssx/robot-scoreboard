@@ -7,6 +7,7 @@
   
   <link rel="stylesheet" href="/css/brand.css">
   <link rel="stylesheet" href="/css/pages/control.css">
+  <link rel="stylesheet" href="/css/pages/control-safety.css">
 </head>
 <body>
   <main class="control-shell">
@@ -40,17 +41,17 @@
       <section class="box">
         <h2>ควบคุมเวลา</h2>
         <div class="button-row">
-          <button class="green" onclick="startTime()">เริ่ม</button>
-          <button class="red" onclick="stopTime()">หยุด</button>
+          <button class="green" id="startTimeButton" type="button">เริ่ม</button>
+          <button class="red" id="stopTimeButton" type="button">หยุด</button>
         </div>
       </section>
 
       <section class="box">
         <h2>รีเซ็ต</h2>
         <div class="button-row">
-          <button class="gray" id="resetScoreButton" onclick="resetScore()">RESET SCORE / SHOT</button>
-          <button class="blue" id="forceSyncButton" onclick="forceSyncScreens()">SYNC SCREENS</button>
-          <button class="red" onclick="resetAll()">รีเซ็ตทั้งหมด</button>
+          <button class="gray" id="resetScoreButton" type="button">RESET SCORE / SHOT</button>
+          <button class="blue" id="forceSyncButton" type="button">SYNC SCREENS</button>
+          <button class="red" id="resetAllButton" type="button">รีเซ็ตทั้งหมด</button>
         </div>
       </section>
 
@@ -128,6 +129,8 @@
   <script src="/js/common/final-warning.js"></script>
   
   <script src="/js/pages/control.js"></script>
-  <script src="/js/common/field-safety.js"></script>
+  <script src="/js/common/notifications.js"></script>
+  <script src="/js/pages/control-actions.js"></script>
+  <script src="/js/pages/control-safety.js"></script>
 </body>
 </html>
