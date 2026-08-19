@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Field Status</title>
+  <link rel="stylesheet" href="/css/brand.css">
+  <link rel="stylesheet" href="/css/pages/status.css">
+</head>
+<body>
+  <main class="status-shell">
+    <div class="brand-strip">
+      <img class="brand-logo" src="/assets/vec-seal.png" alt="R-VEC Robot Contest">
+      <div class="event-title">
+        <strong>FIELD READINESS</strong>
+        <span>ROBOT SCOREBOARD SYSTEM STATUS</span>
+      </div>
+      <img class="brand-seal" src="/assets/robot-contest-logo.png" alt="Vocational Education Commission">
+    </div>
+
+    <nav class="status-nav">
+      <a href="/control">CONTROL</a>
+      <a href="/teams">TEAM SETUP</a>
+      <button id="refreshButton" type="button">REFRESH</button>
+    </nav>
+
+    <section class="readiness-card" id="readinessCard" data-state="loading">
+      <span class="eyebrow">FIELD READINESS</span>
+      <strong id="overallStatus">CHECKING...</strong>
+      <span id="checkedAt">-</span>
+    </section>
+
+    <section class="status-grid">
+      <article class="status-card">
+        <h2>Scoreboard</h2>
+        <dl id="scoreboardDetails"></dl>
+      </article>
+      <article class="status-card">
+        <h2>Machine / Network</h2>
+        <dl id="machineDetails"></dl>
+      </article>
+      <article class="status-card">
+        <h2>Disk</h2>
+        <dl id="diskDetails"></dl>
+      </article>
+      <article class="status-card wide">
+        <h2>Field Checks</h2>
+        <div class="check-list" id="checkList"></div>
+      </article>
+    </section>
+
+    <p class="status-note">หน้านี้ตรวจ readiness ของเครื่องแม่เท่านั้น การเชื่อมต่อ OBS, Wi-Fi/LAN และเสียงเตือนต้องทดสอบบนอุปกรณ์สนามจริงก่อนแข่งขัน</p>
+  </main>
+  <script src="/js/pages/status.js"></script>
+</body>
+</html>
