@@ -9,11 +9,37 @@ const { createApp } = require("../src/http/app");
 async function withServer(run) {
   const scoreboard = {
     getUpdateData() {
-      return { status: "READY", resultLocked: false };
+      return {
+        status: "READY",
+        resultLocked: false,
+        teamNameA: "TEAM A",
+        teamNameB: "TEAM B",
+        time: "00.00",
+      };
+    },
+  };
+  const fieldReadiness = {
+    async inspect() {
+      return {
+        ok: true,
+        checkedAt: new Date().toISOString(),
+        hostname: "test-host",
+        platform: process.platform,
+        node: process.version,
+        uptimeSeconds: 1,
+        network: [{ interface: "test", address: "192.168.1.10" }],
+        disk: {
+          data: { available: true, freeBytes: 1024, totalBytes: 2048 },
+          obs: { available: true, freeBytes: 1024, totalBytes: 2048 },
+        },
+        paths: { dataDir: "/data", obsDir: "/obs", rulesPath: "/rules", publicDir: "/public" },
+        checks: [{ name: "data-writable", ok: true, detail: "/data" }],
+      };
     },
   };
   const app = createApp({
     scoreboard,
+    fieldReadiness,
     publicDir: path.join(__dirname, "..", "public"),
   });
   const server = http.createServer(app);
@@ -37,6 +63,29 @@ test("canonical HTTP routes serve organized pages and health", async () => {
     assert.equal(health.resultLocked, false);
     assert.equal(Number.isInteger(health.uptimeSeconds), true);
     assert.equal(health.uptimeSeconds >= 0, true);
+  });
+});
+
+test("field status exposes machine readiness and scoreboard state", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/field-status`);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.ok, true);
+    assert.equal(data.hostname, "test-host");
+    assert.equal(data.scoreboard.status, "READY");
+    assert.equal(data.scoreboard.teamNameA, "TEAM A");
+    assert.equal(data.checks[0].name, "data-writable");
+
+    const page = await fetch(`${baseUrl}/status`);
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /FIELD READINESS/);
+    assert.match(html, /\/js\/pages\/status\.js/);
+
+    const legacy = await fetch(`${baseUrl}/status.html`, { redirect: "manual" });
+    assert.equal(legacy.status, 308);
+    assert.equal(legacy.headers.get("location"), "/status");
   });
 });
 
