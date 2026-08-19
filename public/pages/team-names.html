@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Name Setup</title>
+  
+  <link rel="stylesheet" href="/css/brand.css">
+  <link rel="stylesheet" href="/css/pages/team-names.css">
+</head>
+<body>
+  <main class="setup-shell">
+    <div class="brand-strip">
+      <img class="brand-logo" src="/assets/vec-seal.png" alt="R-VEC Robot Contest">
+      <div class="event-title">
+        <strong>VEC Service Intelligence Robot</strong>
+        <span>TEAM NAME SETUP</span>
+      </div>
+      <img class="brand-seal" src="/assets/robot-contest-logo.png" alt="Vocational Education Commission">
+    </div>
+
+    <h2>จัดการชื่อทีมแข่งขัน</h2>
+
+    <div class="setup-grid">
+      <section class="box wide">
+        <div class="section-head">
+          <h2>ทีมที่กำลังแข่ง</h2>
+          <div class="status-panel">
+            <div class="status-line" id="serverStatusLine" data-state="offline">SERVER: CONNECTING</div>
+          </div>
+        </div>
+
+        <div class="match-pickers">
+          <div class="team-picker">
+            <div class="current-team">
+              <span>TEAM A</span>
+              <strong id="currentTeamA">TEAM A</strong>
+              <small id="currentTeamSchoolA">SCHOOL -</small>
+              <small id="currentTeamWeightA">WEIGHT -</small>
+            </div>
+            <label for="teamASelect">เลือกชื่อทีม A</label>
+            <select id="teamASelect"></select>
+          </div>
+
+          <div class="team-picker">
+            <div class="current-team">
+              <span>TEAM B</span>
+              <strong id="currentTeamB">TEAM B</strong>
+              <small id="currentTeamSchoolB">SCHOOL -</small>
+              <small id="currentTeamWeightB">WEIGHT -</small>
+            </div>
+            <label for="teamBSelect">เลือกชื่อทีม B</label>
+            <select id="teamBSelect"></select>
+          </div>
+        </div>
+
+        <div class="display-tools">
+          <div class="text-preview">
+            <div class="text-preview-item">
+              <span>ชื่อทีม A</span>
+              <strong id="textPreviewA">TEAM A</strong>
+            </div>
+            <div class="text-preview-item">
+              <span>ชื่อทีม B</span>
+              <strong id="textPreviewB">TEAM B</strong>
+            </div>
+          </div>
+
+          <div class="display-control-panel">
+            <div class="action-row">
+              <button class="blue" id="showTeamNamesButton" type="button">แสดงชื่อทีม</button>
+              <button class="red" id="hideTeamNamesButton" type="button">หยุดแสดง</button>
+            </div>
+            <div class="display-message" id="messageLine">พร้อมใช้งาน</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="box wide result-section">
+        <div class="section-head">
+          <h2>บันทึกผลการแข่งขัน</h2>
+          <div class="status-panel">
+            <div class="status-line" id="matchSaveState" data-state="waiting">RESULT: READY</div>
+          </div>
+        </div>
+
+        <div class="result-board">
+          <div class="live-score" data-side="A">
+            <span>TEAM A</span>
+            <strong id="resultTeamA">TEAM A</strong>
+            <b id="resultScoreA">0</b>
+            <span>SHOT <em id="resultShotA">--.--</em></span>
+            <span>WEIGHT <em id="resultWeightA">-</em></span>
+          </div>
+
+          <div class="live-clock">
+            <span>TIME</span>
+            <strong id="resultTime">00.00</strong>
+            <span id="resultStatus">STOP</span>
+          </div>
+
+          <div class="live-score" data-side="B">
+            <span>TEAM B</span>
+            <strong id="resultTeamB">TEAM B</strong>
+            <b id="resultScoreB">0</b>
+            <span>SHOT <em id="resultShotB">--.--</em></span>
+            <span>WEIGHT <em id="resultWeightB">-</em></span>
+          </div>
+        </div>
+
+        <div class="result-message" id="resultMessage" data-state="waiting">รอครบ 3 นาที ระบบจะบันทึกผลอัตโนมัติ</div>
+      </section>
+
+      <section class="box">
+        <form class="form-stack" id="addTeamForm">
+          <h2>เพิ่มชื่อทีม</h2>
+          <label for="addTeamName">ชื่อทีมใหม่</label>
+          <input id="addTeamName" type="text" autocomplete="off" maxlength="80" placeholder="พิมพ์ชื่อทีม">
+          <label for="addTeamSchool">ชื่อสถานศึกษา</label>
+          <input id="addTeamSchool" type="text" autocomplete="off" maxlength="120" placeholder="พิมพ์ชื่อสถานศึกษา">
+          <label for="addTeamWeight">น้ำหนัก ROBOT (kg)</label>
+          <input id="addTeamWeight" type="number" min="0.1" step="0.1" placeholder="เช่น 12.5">
+          <button class="green" type="submit">เพิ่มทีม</button>
+        </form>
+      </section>
+
+      <section class="box">
+        <form class="form-stack" id="editTeamForm">
+          <h2>แก้ไข / ลบชื่อทีม</h2>
+          <label for="editTeamSelect">เลือกรายชื่อทีม</label>
+          <select id="editTeamSelect"></select>
+          <label for="editTeamName">แก้ไขชื่อ</label>
+          <input id="editTeamName" type="text" autocomplete="off" maxlength="80" placeholder="พิมพ์ชื่อใหม่">
+          <label for="editTeamSchool">ชื่อสถานศึกษา</label>
+          <input id="editTeamSchool" type="text" autocomplete="off" maxlength="120" placeholder="พิมพ์ชื่อสถานศึกษา">
+          <label for="editTeamWeight">น้ำหนัก ROBOT (kg)</label>
+          <input id="editTeamWeight" type="number" min="0.1" step="0.1" placeholder="เช่น 12.5">
+          <div class="action-row">
+            <button class="orange" type="submit">บันทึก</button>
+            <button class="red" id="deleteTeamButton" type="button">ลบทีม</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="box wide result-section">
+        <div class="history-head">
+          <h2>ประวัติผลย้อนหลัง</h2>
+          <div class="history-tools">
+            <div class="history-count" id="historyCount">0 รายการ</div>
+            <button class="pdf-download-button" id="pdfDownloadButton" type="button" disabled>พิมพ์ / บันทึก PDF</button>
+          </div>
+        </div>
+
+        <div class="history-table-wrap">
+          <table class="result-history-table" id="matchHistoryTable">
+            <thead>
+              <tr>
+                <th>คู่ที่</th>
+                <th>ทีม A</th>
+                <th>WEIGHT A</th>
+                <th>SHOT A</th>
+                <th>ภารกิจ A</th>
+                <th>ผล</th>
+                <th>ทีม B</th>
+                <th>WEIGHT B</th>
+                <th>SHOT B</th>
+                <th>ภารกิจ B</th>
+                <th>ผู้ชนะ</th>
+                <th>เวลาบันทึก</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="matchHistoryBody"></tbody>
+          </table>
+          <div class="empty-history" id="emptyHistory">ยังไม่มีประวัติการแข่งขัน</div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  
+  <script src="/js/pages/team-names.js"></script>
+  <script src="/js/common/field-safety.js"></script>
+</body>
+</html>
