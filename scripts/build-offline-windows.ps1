@@ -9,11 +9,14 @@ $Zip = Join-Path $OutputDir "robot-scoreboard-windows-x64.zip"
 
 if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
 if (Test-Path $Zip) { Remove-Item $Zip -Force }
-New-Item -ItemType Directory -Force -Path $Stage, (Join-Path $Stage "runtime"), (Join-Path $Stage "data"), (Join-Path $Stage "obs"), (Join-Path $Stage "backups") | Out-Null
+New-Item -ItemType Directory -Force -Path $Stage, (Join-Path $Stage "runtime"), (Join-Path $Stage "data"), (Join-Path $Stage "obs"), (Join-Path $Stage "backups"), (Join-Path $Stage "scripts") | Out-Null
 
-$copyItems = @("server.js", "package.json", "package-lock.json", "README.md", "public", "src", "config", "scripts", "node_modules")
+$copyItems = @("server.js", "package.json", "package-lock.json", "README.md", "public", "src", "config", "node_modules")
 foreach ($item in $copyItems) {
   Copy-Item (Join-Path $Root $item) -Destination $Stage -Recurse -Force
+}
+foreach ($scriptName in @("backup-scoreboard.ps1", "restore-scoreboard.ps1", "field-check.ps1")) {
+  Copy-Item (Join-Path $Root "scripts\$scriptName") -Destination (Join-Path $Stage "scripts\$scriptName") -Force
 }
 
 $nodeExe = (Get-Command node.exe).Source
