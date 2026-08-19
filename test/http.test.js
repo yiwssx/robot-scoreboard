@@ -40,13 +40,17 @@ test("canonical HTTP routes serve organized pages and health", async () => {
   });
 });
 
-test("page routes use clean URLs and legacy HTML URLs redirect", async () => {
+test("control page uses clean routes and external page modules", async () => {
   await withServer(async (baseUrl) => {
     const control = await fetch(`${baseUrl}/control`);
     assert.equal(control.status, 200);
     const html = await control.text();
     assert.match(html, /\/js\/pages\/control\.js/);
-    assert.match(html, /\/js\/common\/field-safety\.js/);
+    assert.match(html, /\/js\/common\/notifications\.js/);
+    assert.match(html, /\/js\/pages\/control-actions\.js/);
+    assert.match(html, /\/js\/pages\/control-safety\.js/);
+    assert.doesNotMatch(html, /\sonclick=/i);
+    assert.doesNotMatch(html, /field-safety\.js/);
 
     const legacy = await fetch(`${baseUrl}/control.html`, { redirect: "manual" });
     assert.equal(legacy.status, 308);
@@ -54,5 +58,20 @@ test("page routes use clean URLs and legacy HTML URLs redirect", async () => {
 
     const css = await fetch(`${baseUrl}/css/brand.css`);
     assert.equal(css.status, 200);
+  });
+});
+
+test("team pages are statically scoring-only and share one controller", async () => {
+  await withServer(async (baseUrl) => {
+    for (const route of ["/team/a", "/team/b"]) {
+      const response = await fetch(`${baseUrl}${route}`);
+      assert.equal(response.status, 200);
+      const html = await response.text();
+      assert.match(html, /data-team="[AB]"/);
+      assert.match(html, /\/js\/pages\/team-score\.js/);
+      assert.match(html, /\/js\/common\/notifications\.js/);
+      assert.doesNotMatch(html, /startTimeButton|stopTimeButton|resetScoreButton/);
+      assert.doesNotMatch(html, /team-[ab]\.js/);
+    }
   });
 });
