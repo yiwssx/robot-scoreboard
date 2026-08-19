@@ -7,43 +7,10 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-field-hardening:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: agent/re-engineering-hardening
-      - name: Reconstruct reviewed source patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          : > /tmp/changes.b64
-          for sha in b5ec89e082f1d1c6920250fbcb783f231a76ba60 53baa6eb4330c823a88acefe16c533d0e9dfdad8 fe2227a422ef7dc1f02d85189b9450722a9e2f4e 8c3966b2a8b8ab9fe9626c353ea74446212df84a 20e6c3b6d9f77409c29a98c36abd84e156b1c363 1647680af3b6264f067c974943b8d96f802449b5; do
-            gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${sha}" --jq .content | tr -d '\n' | base64 -d >> /tmp/changes.b64
-          done
-          test "$(wc -c < /tmp/changes.b64 | tr -d ' ')" = "31064"
-          base64 -d /tmp/changes.b64 > /tmp/changes.tgz
-          echo "367d77d8ee40bcde66217eb71b69ef0fefd279e08d487ae2faf3346f662f3600  /tmp/changes.tgz" | sha256sum -c -
-          tar -xzf /tmp/changes.tgz
-      - name: Commit source hardening
-        shell: bash
-        run: |
-          set -euo pipefail
-          git restore .github/workflows/ci.yml
-          rm -f .github/workflows/release-offline.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md package.json .gitignore server.js config src public/field-safety.js public/final-warning.js test scripts
-          git commit -m "complete offline field hardening"
-          git push origin HEAD:agent/re-engineering-hardening
-
-  test:
+  linux-test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -57,4 +24,18 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - run: npm audit --audit-level=high
+
+  windows-field-validation:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run stress:obs
       - run: npm audit --audit-level=high
