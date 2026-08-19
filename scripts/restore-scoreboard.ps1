@@ -27,9 +27,10 @@ $backupScript = Join-Path $PSScriptRoot "backup-scoreboard.ps1"
 
 foreach ($name in @("data", "obs", "config")) {
   $target = Join-Path $Root $name
+  $source = Join-Path $BackupPath $name
   New-Item -ItemType Directory -Force -Path $target | Out-Null
   Get-ChildItem -Path $target -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-  Copy-Item (Join-Path $BackupPath $name "*") -Destination $target -Recurse -Force
+  Get-ChildItem -Path $source -Force | Copy-Item -Destination $target -Recurse -Force
 }
 
 Write-Host "Restore completed from: $BackupPath"
