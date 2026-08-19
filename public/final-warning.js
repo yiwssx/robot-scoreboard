@@ -1,4 +1,6 @@
 (function () {
+  "use strict";
+
   let audioContext = null;
   let warningAudio = null;
   let warningAudioSourceIndex = 0;
@@ -6,36 +8,16 @@
   let warningAudioPlaying = false;
   let lastWarningSecond = null;
   let warningStarted = false;
-  const finalWarningSeconds = 10;
-  const warningAudioSources = [
-    "/assets/videoplayback.wav",
-    "/assets/videoplayback.mp3",
-    "/assets/videoplayback.m4a",
-    "/assets/videoplayback.ogg",
-    "/assets/videoplayback.webm",
-    "/assets/videoplayback.mp4",
-    "/assets/videoplayback",
-    "/videoplayback.wav",
-    "/videoplayback.mp3",
-    "/videoplayback.m4a",
-    "/videoplayback.ogg",
-    "/videoplayback.webm",
-    "/videoplayback.mp4",
-    "/videoplayback",
+  const sources = [
+    "/assets/videoplayback.wav", "/assets/videoplayback.mp3", "/assets/videoplayback.m4a",
+    "/assets/videoplayback.ogg", "/assets/videoplayback.webm", "/assets/videoplayback.mp4",
   ];
 
   function getAudioContext() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return null;
-
-    if (!audioContext) {
-      audioContext = new AudioContextClass();
-    }
-
-    if (audioContext.state === "suspended") {
-      audioContext.resume().catch(() => {});
-    }
-
+    if (!audioContext) audioContext = new AudioContextClass();
+    if (audioContext.state === "suspended") audioContext.resume().catch(() => {});
     return audioContext;
   }
 
@@ -43,123 +25,56 @@
     if (!warningAudio) {
       warningAudio = new Audio();
       warningAudio.preload = "auto";
-      warningAudio.addEventListener("ended", () => {
-        warningAudioPlaying = false;
-      });
-      warningAudio.addEventListener("pause", () => {
-        warningAudioPlaying = false;
-      });
+      warningAudio.addEventListener("ended", () => { warningAudioPlaying = false; });
+      warningAudio.addEventListener("pause", () => { warningAudioPlaying = false; });
     }
-
     return warningAudio;
   }
 
   function stopWarningAudio() {
     if (!warningAudio) return;
-
-    try {
-      warningAudio.pause();
-      warningAudio.currentTime = 0;
-    } catch (error) {
-      // The browser may reject seeking while the audio source is changing.
-    }
-
+    try { warningAudio.pause(); warningAudio.currentTime = 0; } catch {}
     warningAudioPlaying = false;
   }
 
-  function playWarningBeep() {
+  function beep() {
     const context = getAudioContext();
     if (!context || context.state !== "running") return;
-
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     const now = context.currentTime;
-
     oscillator.type = "square";
     oscillator.frequency.setValueAtTime(920, now);
-
     gain.gain.setValueAtTime(0.001, now);
     gain.gain.exponentialRampToValueAtTime(0.18, now + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start(now);
-    oscillator.stop(now + 0.2);
+    oscillator.connect(gain); gain.connect(context.destination);
+    oscillator.start(now); oscillator.stop(now + 0.2);
   }
 
-  function loadWarningAudioSource(audio, sourceIndex) {
-    warningAudioSourceIndex = sourceIndex;
-    audio.src = warningAudioSources[sourceIndex];
+  async function trySource(index) {
+    if (index >= sources.length) throw new Error("no audio source");
+    const audio = getWarningAudio();
+    audio.src = sources[index];
     audio.load();
-  }
-
-  function seekWarningAudio(audio) {
+    warningAudioSourceIndex = index;
     try {
       audio.currentTime = 0;
-    } catch (error) {
-      audio.currentTime = 0;
+      audio.muted = false;
+      await audio.play();
+      warningAudioPlaying = true;
+    } catch {
+      return trySource(index + 1);
     }
   }
 
-  function playWarningAudioFromSource(sourceIndex) {
-    return new Promise((resolve, reject) => {
-      if (sourceIndex >= warningAudioSources.length) {
-        warningAudioUnavailable = true;
-        reject(new Error("No warning audio source could be loaded."));
-        return;
-      }
-
-      const audio = getWarningAudio();
-      const sourceUrl = new URL(warningAudioSources[sourceIndex], window.location.href).href;
-
-      if (audio.src !== sourceUrl) {
-        loadWarningAudioSource(audio, sourceIndex);
-      }
-
-      const cleanup = () => {
-        audio.removeEventListener("loadedmetadata", onReady);
-        audio.removeEventListener("canplay", onReady);
-        audio.removeEventListener("error", onError);
-      };
-
-      const onReady = () => {
-        cleanup();
-        seekWarningAudio(audio);
-        audio.muted = false;
-        audio
-          .play()
-          .then(() => {
-            warningAudioPlaying = true;
-            resolve();
-          })
-          .catch(reject);
-      };
-
-      const onError = () => {
-        cleanup();
-        playWarningAudioFromSource(sourceIndex + 1).then(resolve).catch(reject);
-      };
-
-      audio.addEventListener("loadedmetadata", onReady, { once: true });
-      audio.addEventListener("canplay", onReady, { once: true });
-      audio.addEventListener("error", onError, { once: true });
-
-      if (audio.readyState >= 1) {
-        onReady();
-      }
-    });
-  }
-
   function playWarningAudio() {
-    if (warningAudioUnavailable || warningAudioPlaying) return false;
-
-    playWarningAudioFromSource(warningAudioSourceIndex).catch(() => {
+    if (warningAudioUnavailable || warningAudioPlaying) return;
+    trySource(warningAudioSourceIndex).catch(() => {
+      warningAudioUnavailable = true;
       warningAudioPlaying = false;
-      playWarningBeep();
+      beep();
     });
-
-    return true;
   }
 
   function unlockWarningAudio() {
@@ -170,43 +85,31 @@
   function applyFinalWarning(data) {
     const timeElement = document.getElementById("time");
     if (!timeElement) return;
-
-    const remainingSeconds = Number(data.remainingSeconds);
-    const shouldWarn =
-      data.status === "RUNNING" &&
-      Number.isFinite(remainingSeconds) &&
-      remainingSeconds > 0 &&
-      remainingSeconds <= finalWarningSeconds;
-
+    const remaining = Number(data.remainingSeconds);
+    const threshold = Number(data.finalWarningSeconds) > 0 ? Number(data.finalWarningSeconds) : 10;
+    const shouldWarn = data.status === "RUNNING" && Number.isFinite(remaining) && remaining > 0 && remaining <= threshold;
     timeElement.classList.toggle("final-warning", shouldWarn);
 
     if (!shouldWarn) {
       lastWarningSecond = null;
       warningStarted = false;
-      if (data.status !== "FINISH") {
-        stopWarningAudio();
-      }
+      if (data.status !== "FINISH") stopWarningAudio();
       return;
     }
-
     if (!warningStarted) {
       warningStarted = true;
-      lastWarningSecond = remainingSeconds;
+      lastWarningSecond = remaining;
       playWarningAudio();
       return;
     }
-
-    if (remainingSeconds !== lastWarningSecond) {
-      lastWarningSecond = remainingSeconds;
-      if (warningAudioUnavailable) {
-        playWarningBeep();
-      }
+    if (remaining !== lastWarningSecond) {
+      lastWarningSecond = remaining;
+      if (warningAudioUnavailable) beep();
     }
   }
 
   document.addEventListener("pointerdown", unlockWarningAudio, { once: true });
   document.addEventListener("keydown", unlockWarningAudio, { once: true });
-
   window.applyFinalWarning = applyFinalWarning;
   window.unlockWarningAudio = unlockWarningAudio;
 })();
