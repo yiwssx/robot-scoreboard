@@ -3,7 +3,12 @@
 
   if (typeof io !== "function") return;
 
-  const page = window.location.pathname.toLowerCase();
+  const page = (window.location.pathname.toLowerCase().replace(/\/+$/, "") || "/");
+  const isControlPage = page === "/control" || page.endsWith("/control.html");
+  const isTeamAPage = page === "/team/a" || page.endsWith("/team-a.html");
+  const isTeamBPage = page === "/team/b" || page.endsWith("/team-b.html");
+  const isTeamPage = isTeamAPage || isTeamBPage;
+  const isTeamsPage = page === "/teams" || page.endsWith("/team-names.html");
   const safetySocket = io();
   let latest = null;
   let toastTimer = null;
@@ -56,13 +61,13 @@
   }
 
   function enforceTeamScoringState() {
-    if (!latest || !(page.endsWith("team-a.html") || page.endsWith("team-b.html"))) return;
+    if (!latest || !isTeamPage) return;
     const running = latest.status === "RUNNING";
     scoringButtons().forEach((button) => { button.disabled = !running; });
   }
 
   function makeTeamPageScoringOnly() {
-    if (!(page.endsWith("team-a.html") || page.endsWith("team-b.html"))) return;
+    if (!isTeamPage) return;
 
     const timerGrid = document.querySelector(".timer-grid");
     if (timerGrid) timerGrid.remove();
@@ -154,7 +159,7 @@
   }
 
   function buildResultReview() {
-    if (!page.endsWith("control.html") || document.getElementById("fieldResultReview")) return null;
+    if (!isControlPage || document.getElementById("fieldResultReview")) return null;
     const section = document.createElement("section");
     section.id = "fieldResultReview";
     section.className = "box result-section";
@@ -254,7 +259,7 @@
   let reviewPanel = null;
 
   function updateControlSafety(data) {
-    if (!page.endsWith("control.html")) return;
+    if (!isControlPage) return;
     const running = data.status === "RUNNING";
     const active = running || data.status === "PAUSED";
     const reviewPending = data.status === "FINISH" && !data.resultLocked;
@@ -280,7 +285,7 @@
   }
 
   function enforceDistinctTeamOptions(data) {
-    if (!page.endsWith("team-names.html")) return;
+    if (!isTeamsPage) return;
     const selectA = document.getElementById("teamASelect");
     const selectB = document.getElementById("teamBSelect");
     if (selectA && selectB) {
@@ -296,7 +301,7 @@
 
   function initialize() {
     makeTeamPageScoringOnly();
-    if (page.endsWith("control.html")) {
+    if (isControlPage) {
       safeResetScore = replaceWithSafeResetScore();
       safeResetAll = replaceWithHoldResetAll();
       reviewPanel = buildResultReview();
