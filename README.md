@@ -129,7 +129,7 @@ npm run stress:obs
 npm audit --audit-level=high
 ```
 
-CI ตรวจ Node 20/22 บน Linux และมี `windows-latest` field-validation job ที่รัน tests + OBS persistence stress test พร้อม concurrent readers.
+CI ตรวจ Node 20/22 บน Linux และมี `windows-latest` field-validation job ที่รัน tests, OBS persistence stress test พร้อม concurrent readers และสร้าง Offline Windows ZIP จริงเพื่อยืนยันว่าชุดสนามแพ็กได้ครบก่อน merge/release.
 
 ## Offline Windows package
 
