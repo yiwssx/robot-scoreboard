@@ -1,14 +1,14 @@
 {
   "name": "robot-scoreboard",
   "version": "1.0.0",
-  "description": "Realtime competition scoreboard for VEC Service Intelligence Robot",
+  "description": "Offline LAN competition scoreboard for VEC Service Intelligence Robot",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/domain.js",
+    "check": "node --check server.js && node --check src/domain.js && node --check src/persistence.js && node --check src/scoreboard.js && node --check src/socket-handlers.js",
     "test": "node --test test/*.test.js"
   },
-  "keywords": ["scoreboard", "robot", "socket.io", "obs"],
+  "keywords": ["scoreboard", "robot", "socket.io", "obs", "offline"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
