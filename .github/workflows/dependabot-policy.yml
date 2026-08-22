@@ -1,0 +1,54 @@
+name: Dependabot Policy
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  classify:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ensure dependency automation labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
+            -f name='dependencies' -f color='0366D6' \
+            -f description='Dependency update' >/dev/null 2>&1 || true
+          gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
+            -f name='automerge-safe' -f color='0E8A16' \
+            -f description='Dependabot patch/minor update eligible for automatic merge after CI' >/dev/null 2>&1 || true
+          gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
+            -f name='dependency-major' -f color='B60205' \
+            -f description='Major dependency update requiring manual review' >/dev/null 2>&1 || true
+
+      - name: Classify update for automatic merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          gh pr edit "$PR_URL" --add-label "dependencies"
+
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor)
+              gh pr edit "$PR_URL" --add-label "automerge-safe"
+              gh pr edit "$PR_URL" --remove-label "dependency-major" >/dev/null 2>&1 || true
+              ;;
+            *)
+              gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
+              gh pr edit "$PR_URL" --add-label "dependency-major"
+              ;;
+          esac
