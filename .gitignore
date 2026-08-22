@@ -5,9 +5,9 @@ dist/
 backups/
 
 # Runtime persistence and audit trail
-/data/*
-!/data/.gitkeep
+/runtime/data/*
+!/runtime/data/.gitkeep
 
 # OBS text/json output
-/obs/*
-!/obs/.gitkeep
+/runtime/obs/*
+!/runtime/obs/.gitkeep
