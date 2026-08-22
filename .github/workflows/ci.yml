@@ -22,7 +22,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      - run: npm run build:frontend
+      - run: npm run build:client
       - run: npm run check
       - run: npm test
       - run: npm audit --audit-level=high
@@ -36,22 +36,22 @@ jobs:
           node-version: 22.x
           cache: npm
       - run: npm ci
-      - run: npm run build:frontend
+      - run: npm run build:client
       - run: npm run check
       - run: npm test
       - run: npm run stress:obs
       - name: Run live field self-test
         shell: powershell
         run: |
-          $server = Start-Process node -ArgumentList 'server.js' -PassThru
+          $server = Start-Process node -ArgumentList 'server/main.js' -PassThru
           try {
             Start-Sleep -Seconds 2
-            & scripts/field-check.ps1
+            & tools/field/field-check.ps1
             if ($LASTEXITCODE -ne 0) { throw "Field check failed with exit code $LASTEXITCODE" }
           } finally {
             Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
           }
-      - run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-backup-restore.ps1
+      - run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/field/backup-restore.ps1
       - run: npm run build:offline:windows
-      - run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-offline-package.ps1
+      - run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/verify-offline-package.ps1
       - run: npm audit --audit-level=high

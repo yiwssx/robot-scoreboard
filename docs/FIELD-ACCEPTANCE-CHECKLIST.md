@@ -14,7 +14,7 @@
 
 ## 2. OBS acceptance
 
-- [ ] OBS Text Sources ชี้ไป `obs/*.txt` ของ release นี้
+- [ ] OBS Text Sources ชี้ไป `runtime/obs/*` ของ release นี้
 - [ ] score A/B เปลี่ยนตามระบบ
 - [ ] time/status เปลี่ยนตามระบบ
 - [ ] SHOT A/B เปลี่ยนตามระบบ
@@ -78,7 +78,7 @@
 ## 8. Backup / Restore drill
 
 - [ ] `BACKUP-SCOREBOARD.cmd` สร้าง backup ได้
-- [ ] backup มี `manifest.json`, `data/`, `obs/`, `config/`
+- [ ] backup มี `manifest.json`, `data/`, `obs/`, `config/` (สำเนาจาก `runtime/`)
 - [ ] stop server ก่อน restore
 - [ ] ทดลอง restore backup ในรอบซ้อม
 - [ ] หลัง restore เปิด `/status` และตรวจ PASS ทั้งหมด
