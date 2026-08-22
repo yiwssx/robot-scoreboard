@@ -1,161 +1,120 @@
 # Robot Scoreboard — Offline Competition Edition
 
-ระบบ Scoreboard สำหรับการแข่งขันหุ่นยนต์แบบ **Offline / Trusted LAN** ใช้ Node.js + Express + Socket.IO และส่งค่าคะแนน/เวลาไปยัง OBS ผ่านไฟล์ใน `obs/`.
+ระบบ Scoreboard สำหรับการแข่งขันหุ่นยนต์แบบ **Offline / Trusted LAN** โดยให้เครื่องกลางเป็น authoritative host สำหรับกติกา เวลา คะแนน persistence และระบบ Broadcast/OBS ส่วนเครื่อง Team A และ Team B เป็น thin browser clients สำหรับบันทึกคะแนนเท่านั้น
+
+## Runtime topology
+
+```text
+TEAM A browser ─┐
+                ├── trusted LAN ──► CENTRAL MACHINE
+TEAM B browser ─┘                    ├─ Node.js / Express / Socket.IO
+                                     ├─ authoritative competition state
+Control / Teams / Status ───────────►├─ data persistence
+                                     ├─ local OBS text output
+                                     ├─ read-only Browser Source overlay
+                                     └─ OBS Studio
+```
+
+ข้อกำหนดหลัก:
+
+- OBS อยู่ที่ **เครื่องกลางเท่านั้น**
+- เครื่อง Team A/B ไม่มี OBS, `obs/`, Node.js หรือ npm dependency
+- OBS text output ใช้ local filesystem ของเครื่องกลาง ไม่ผ่าน LAN
+- OBS Browser Source ใช้ `http://127.0.0.1:3000/overlay/main`
+- ถ้า LAN สนามมีปัญหา Server/Control/OBS บนเครื่องกลางยังทำงานต่อได้
+- ไม่มี login/token/cloud/Internet dependency ตอนใช้งานสนาม; trusted LAN คือ security boundary
+- ห้าม port-forward TCP 3000 ออก Internet
 
 ## Architecture
 
-โปรเจกต์เป็น **layered modular monolith**: HTTP และ Socket.IO เป็น transport layer, business operations อยู่ใน services, validation/pure rules อยู่ใน domain และ filesystem/OBS/event log อยู่ใน infrastructure.
+Backend เป็น layered modular monolith:
 
 ```text
-robot-scoreboard/
-├─ server.js                         # composition root / process lifecycle
-├─ src/
-│  ├─ application/                   # in-memory state + runtime orchestration
-│  ├─ config/                        # env + competition rules
-│  ├─ domain/                        # pure team/time/scoring/result rules
-│  ├─ services/                      # match/scoring/team/result use cases
-│  ├─ http/                          # app/routes/controllers/middleware
-│  ├─ sockets/                       # Socket.IO transport modules
-│  └─ infrastructure/
-│     ├─ persistence/
-│     ├─ logging/
-│     └─ diagnostics/                # field-readiness checks
-├─ public/
-│  ├─ pages/
-│  ├─ css/
-│  ├─ js/
-│  └─ assets/
-├─ config/competition-rules.json
-├─ data/
-├─ obs/
-├─ scripts/
-├─ docs/
-└─ test/
+HTTP / Socket transports
+          │
+          ▼
+       services
+          │
+          ▼
+        domain
+
+application ──► persistence / broadcast ports
 ```
 
-Dependency direction:
+Frontend เป็น **Vite + TypeScript + Preact Multi-Page Application** ที่ compile เป็น static assets ก่อนนำลงสนาม:
 
 ```text
-HTTP routes/controllers ─┐
-Socket.IO transports ────┤
-                         ▼
-                      services
-                         ▼
-                       domain
-
-services/application ──► infrastructure
+frontend/src/
+├─ apps/
+│  ├─ control/
+│  ├─ team/          # shared Team A/B application
+│  ├─ teams/
+│  ├─ status/
+│  └─ overlay/       # read-only OBS Browser Source
+├─ core/
+│  ├─ contracts.ts
+│  ├─ realtime.ts
+│  └─ store.ts
+├─ features/
+└─ shared/
 ```
 
-## หลักการใช้งานสนาม
+Field runtime ไม่รัน Vite server และไม่ต้องมี TypeScript/Preact packages; bundle ที่ build แล้วอยู่ใน `public/app/`.
 
-- ไม่มี login, token, cloud service หรือ Internet dependency ตอนใช้งานสนาม
-- LAN ของสนามคือ security boundary; **ห้าม port-forward TCP 3000 ออก Internet**
-- Control เป็นศูนย์ควบคุมเวลา/reset/result review
-- Team A/B ใช้บันทึกคะแนนและภารกิจของฝั่งตัวเอง
-- Business rules และ validation อยู่ฝั่ง server
-- Runtime data และ backup ไม่ถูก commit ลง Git
-
-## URLs
-
-Canonical routes:
-
-- Control: `http://localhost:3000/control`
-- Team A: `http://localhost:3000/team/a`
-- Team B: `http://localhost:3000/team/b`
-- Team setup: `http://localhost:3000/teams`
-- Field status: `http://localhost:3000/status`
-- Health check: `http://localhost:3000/healthz`
-- Field status API: `http://localhost:3000/api/field-status`
-
-URL เดิม `/control.html`, `/team-a.html`, `/team-b.html`, `/team-names.html`, `/status.html` รองรับด้วย redirect ไป canonical route.
-
-## Field readiness
-
-หน้า `/status` ตรวจ readiness ของเครื่องแม่แบบ read-only ต่อ state การแข่งขัน และ active-write probe เฉพาะ temporary file สำหรับ path ที่ต้องเขียนจริง:
-
-- `data/` เขียนได้
-- `obs/` เขียนได้
-- `config/competition-rules.json` อ่านและ parse ได้
-- page files หลักอยู่ครบ
-- disk free space ของ `data/` และ `obs/`
-- hostname / Node / platform
-- IPv4 interfaces สำหรับ LAN สนาม
-- scoreboard status, team A/B, result lock และเวลา
-
-ถ้า critical check ไม่ผ่าน `/api/field-status` ตอบ HTTP `503` เพื่อไม่ให้ระบบถูกตีความว่า ready โดยผิดพลาด.
-
-บน Offline Windows package ใช้:
+### Client data flow
 
 ```text
-FIELD-CHECK.cmd
-OPEN-FIELD-STATUS.cmd
+Socket.IO update
+      │
+      ▼
+central realtime client
+      │
+      ▼
+    store
+      │
+      ▼
+Preact components
 ```
 
-`FIELD-CHECK.cmd` ตรวจ diagnostics และ HTTP routes หลักทั้งหมด. อย่างไรก็ตาม machine readiness ไม่แทนการทดสอบ OBS, LAN clients, audio และ power recovery บนอุปกรณ์จริง.
+แต่ละ page มี Socket.IO connection หลักเพียงชุดเดียวผ่าน realtime client กลาง. Component ไม่เปิด `io()` เองและไม่รู้ transport details.
 
-## State machine
+Backend เป็น single source of truth สำหรับ competition rules รวมถึง winner/result logic; frontend แสดง `winner`/`winnerName` ที่ backend คำนวณแล้ว ไม่คำนวณกติกาซ้ำ.
+
+## Broadcast / OBS architecture
+
+Application layer สร้าง `BroadcastState` ที่มีเฉพาะข้อมูลที่ต้องออกอากาศ จากนั้นส่งไป adapters:
 
 ```text
-READY --START--> RUNNING --STOP--> PAUSED --START--> RUNNING
-                      |
-                      +--ครบเวลา--> FINISH --> RESULT REVIEW --> LOCKED
-
-RESET/เลือกทีม/แก้ข้อมูลทีม ทำได้เมื่อ READY
-คะแนน/SHOT/MISSION ทำได้เมื่อ RUNNING เท่านั้น
-RESET ALL ใช้ไม่ได้ขณะ RUNNING/PAUSED
-หลัง FINISH ต้องยืนยันผลก่อนเริ่มคู่ใหม่
+Authoritative scoreboard state
+            │
+            ▼
+    Broadcast Projector
+            │
+            ▼
+      BroadcastState
+        ┌───┴──────────────┐
+        ▼                  ▼
+TextFileBroadcastOutput   /broadcast Socket.IO
+        │                  │
+        ▼                  ▼
+     obs/*.txt        Browser Source overlay
+        │                  │
+        └──────► OBS Studio ◄──────┘
 ```
 
-ถ้า server/เครื่อง restart ระหว่าง `RUNNING` ระบบ restore คะแนนและเวลาเท่าที่ persist ล่าสุด แล้วกลับมาเป็น `PAUSED`.
+`scoreboard-runtime` ไม่รู้ชื่อไฟล์ OBS แล้ว. Mapping เช่น `score_a.txt` และ `time.txt` อยู่ใน infrastructure adapter เท่านั้น.
 
-## Competition rules
+### OBS text output
 
-แก้ไขได้ที่ `config/competition-rules.json`:
+Text output ยังคงเป็น reliable primary/fallback path และรักษาพฤติกรรมเดิม:
 
-```json
-{
-  "matchDurationSeconds": 180,
-  "finalWarningSeconds": 10,
-  "scoreAdjustments": [-20, -10, 10, 20],
-  "missions": { "1": 10, "2": 20, "3": 20, "4": 20 }
-}
-```
+- changed-only writes
+- debounce
+- atomic replace
+- retry บน Windows สำหรับ `EBUSY`, `EPERM`, `EACCES`, `EEXIST`
+- ทำงาน local บนเครื่องกลาง
 
-ค่าทั้งหมดถูก validate ก่อนใช้ และ fallback เป็นค่า default หากไฟล์เสีย; `/status` จะยังเตือนว่าไฟล์ rules ไม่พร้อมเมื่อ JSON parse ไม่ได้.
-
-## Human-error protection
-
-- หน้า Team A/B เป็น scoring-only; START/STOP/RESET อยู่ที่ Control
-- คะแนน/mission ถูก reject ถ้า status ไม่ใช่ `RUNNING`
-- Mission เดิมบันทึกซ้ำไม่ได้
-- TEAM A และ TEAM B ห้ามเป็นทีมเดียวกัน
-- Rename ทีมไปชนชื่อเดิมถูก reject
-- RESET ALL ที่ Control ต้องกดค้างประมาณ 2 วินาที
-- RESET ถูก reject ขณะ `RUNNING` หรือ `PAUSED`
-
-## Result Review / Correction
-
-เมื่อครบเวลา ระบบบันทึกผลอัตโนมัติแต่ยังอยู่สถานะ Review:
-
-- ปรับคะแนน ±10 / ±20
-- แก้ SHOT หลัก
-- แก้เวลาภารกิจ 1–4
-- กด **ยืนยันผลการแข่งขันและล็อกผล**
-
-เมื่อผลถูกล็อกแล้วจึง RESET เพื่อเตรียมคู่ถัดไปได้.
-
-## Persistence / OBS
-
-Persistent data:
-
-```text
-data/team-names.json
-data/match-results.json
-data/live-match-state.json
-data/event-log.ndjson
-```
-
-OBS output:
+ไฟล์หลัก:
 
 ```text
 obs/score_a.txt
@@ -171,78 +130,130 @@ obs/nameschool-a.text
 obs/nameschool-b.text
 ```
 
-การเขียนไฟล์เป็น asynchronous, debounced, atomic และเขียน OBS เฉพาะค่าที่เปลี่ยน พร้อม retry สำหรับ `EBUSY` / `EPERM` / `EACCES` / `EEXIST` บน Windows.
+### OBS Browser Source
 
-## Backup / Restore
-
-Offline Windows package มี:
+ใช้ URL local:
 
 ```text
-BACKUP-SCOREBOARD.cmd
-RESTORE-SCOREBOARD.cmd
+http://127.0.0.1:3000/overlay/main
 ```
 
-Backup เก็บ `data/`, `obs/`, `config/` พร้อม `manifest.json` ลง `backups/<timestamp>-<label>`.
+Overlay เชื่อม `/broadcast` namespace ซึ่งมีเฉพาะ server → client `broadcast:update`; ไม่มี START/STOP/RESET/scoring handlers จึงเป็น read-only transport โดย design.
 
-Restore มี safety guard:
+## URLs
 
-1. ต้องหยุด scoreboard ก่อน; ถ้า TCP 3000 ยัง LISTENING จะ reject
-2. ต้องมี `manifest.json`, `data/`, `obs/`, `config/` ครบ
-3. ก่อนเขียนทับ จะสร้าง `pre-restore` backup ของ current state อัตโนมัติ
-4. หลัง restore ต้อง start server และตรวจ `/status` ก่อนกลับเข้าสนาม
+- Control: `http://localhost:3000/control`
+- Team A: `http://IP-เครื่องกลาง:3000/team/a`
+- Team B: `http://IP-เครื่องกลาง:3000/team/b`
+- Team setup: `http://localhost:3000/teams`
+- Field status: `http://localhost:3000/status`
+- OBS overlay: `http://127.0.0.1:3000/overlay/main`
+- Health: `http://localhost:3000/healthz`
+- Field status API: `http://localhost:3000/api/field-status`
 
-## Tests / CI
+Legacy `.html` URLs ยังคง redirect ไป canonical routes.
+
+## State machine
+
+```text
+READY --START--> RUNNING --STOP--> PAUSED --START--> RUNNING
+                      |
+                      +--ครบเวลา--> FINISH --> RESULT REVIEW --> LOCKED
+```
+
+- Team A/B scoring ทำได้เฉพาะ `RUNNING`
+- START/STOP/RESET อยู่ที่ Control
+- RESET ALL ถูกป้องกันด้วย hold action และใช้ไม่ได้ระหว่าง active/review pending
+- หลัง FINISH ต้อง review/finalize ก่อนคู่ถัดไป
+
+## Persistence
+
+```text
+data/team-names.json
+data/match-results.json
+data/live-match-state.json
+data/event-log.ndjson
+```
+
+Data persistence และ broadcast file output ใช้ write queues แยกกันบน shared atomic-write primitive. Legacy OBS JSON/text ยังอ่านได้เพื่อ migration แต่ระบบใหม่ persist state ลง `data/`.
+
+## Field readiness
+
+`/status` ตรวจ:
+
+- `data/` writable
+- `obs/` writable
+- competition rules valid
+- canonical HTML pages ครบ
+- compiled frontend entries `public/app/*.js` ครบ
+- Broadcast text-output health
+- hostname/platform/Node/disk/LAN IPv4
+- connected clients แยก role เช่น `team-a`, `team-b`, `control`, `overlay`
+- scoreboard state
+
+ถ้า critical check ไม่ผ่าน `/api/field-status` ตอบ HTTP 503.
+
+## Development / validation
 
 ```bash
+npm ci
+npm run build:frontend
 npm run check
 npm test
 npm run stress:obs
 npm audit --audit-level=high
 ```
 
-CI ตรวจ Node 20/22 บน Linux. Windows field-validation เพิ่มการตรวจ:
+`npm run check` รวม JavaScript syntax check และ TypeScript strict typecheck.
 
-- tests และ OBS stress
-- start server จริงและรัน field route/readiness self-test
-- backup → mutate → restore พร้อมตรวจ pre-restore backup
-- สร้าง Offline Windows ZIP
-- verify ว่า ZIP stage มี START/STOP/FIELD-CHECK/BACKUP/RESTORE และ status assets ครบ
-- audit
+CI ตรวจ Node 20/22 บน Linux และ Windows field-validation ซึ่งรวม:
+
+- frontend build
+- TypeScript + JavaScript checks
+- backend/domain/integration/broadcast tests
+- OBS broadcast stress 1,500 updates พร้อม concurrent readers
+- live server field self-test
+- backup/restore drill
+- Offline Windows ZIP build + content verification
+- security audit
 
 ## Offline Windows package
 
 สร้างด้วย:
 
 ```powershell
-npm ci --omit=dev
-powershell -ExecutionPolicy Bypass -File scripts/build-offline-windows.ps1
+npm ci
+npm run build:offline:windows
 ```
 
-แพ็กเกจมี `node.exe` และ dependencies ครบ ไม่ต้องติดตั้ง Node.js หรือ `npm install` ที่สนาม.
+Packaging จะ build frontend ก่อน แล้ว prune devDependencies ออกจาก staged runtime. ดังนั้นเครื่องสนามได้เฉพาะ bundled frontend + production Node dependencies + `node.exe`.
 
-ไฟล์หลักที่ operator ใช้:
+Operator files:
 
 ```text
 START-SCOREBOARD.cmd
 STOP-SCOREBOARD.cmd
 FIELD-CHECK.cmd
 OPEN-FIELD-STATUS.cmd
+OPEN-OBS-OVERLAY.cmd
 BACKUP-SCOREBOARD.cmd
 RESTORE-SCOREBOARD.cmd
 ```
 
+เครื่องสนามไม่ต้อง `npm install`.
+
+## Backup / Restore
+
+Backup เก็บ `data/`, `obs/`, `config/` พร้อม manifest. Restore ต้อง STOP server ก่อนและระบบจะสร้าง pre-restore backup อัตโนมัติก่อนเขียนทับ.
+
 ## Field acceptance / release freeze
 
-ก่อนประกาศ release ว่า **Field Approved** ต้องใช้เครื่อง/OBS/network/audio จริงและทำ checklist:
+ก่อนประกาศ release ว่า **Field Approved** ต้องทดสอบเครื่องกลาง + OBS + Team A/B devices + LAN + audio + power recovery จริงตาม:
 
 ```text
 docs/FIELD-ACCEPTANCE-CHECKLIST.md
 ```
 
-ขั้นต่ำควรผ่าน 10–20 match endurance, restart/power-loss recovery, OBS reopen/read contention, LAN reconnect, audio warning และ backup/restore drill. หลัง freeze ไม่ควร refactor หรือ update dependency ก่อนวันแข่ง เว้นแต่แก้ defect ที่ยืนยันแล้วและ rerun checklist ที่เกี่ยวข้อง.
+CI ไม่ทดแทน physical field acceptance. หลังผ่านจริงแล้วจึง tag/freeze release สำหรับวันแข่งขัน.
 
-## Migration จากเวอร์ชันเดิม
-
-ก่อนอัปเดตเครื่องสนาม ให้สำรอง `obs/` เดิมหนึ่งครั้ง. ระบบยังอ่าน legacy JSON จาก `obs/` ได้เมื่อยังไม่มีไฟล์ใหม่ใน `data/` แล้ว persist ต่อในโครงสร้างใหม่.
-
-`node_modules/`, `data/*`, `obs/*`, `backups/`, log และ `dist/` ถูก ignore จาก Git โดยตั้งใจ.
+รายละเอียดสถาปัตยกรรม client/broadcast ดู `docs/CLIENT-BROADCAST-ARCHITECTURE.md`.
