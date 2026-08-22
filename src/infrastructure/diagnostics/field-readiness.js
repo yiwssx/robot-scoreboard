@@ -58,7 +58,7 @@ function lanAddresses() {
   return addresses;
 }
 
-function createFieldReadiness({ dataDir, obsDir, rulesPath, publicDir }) {
+function createFieldReadiness({ dataDir, obsDir, rulesPath, publicDir, getClientSummary = null, getBroadcastHealth = null }) {
   async function inspect() {
     const checks = await Promise.all([
       checkWritableDirectory("data-writable", dataDir),
@@ -68,6 +68,8 @@ function createFieldReadiness({ dataDir, obsDir, rulesPath, publicDir }) {
       checkPage(publicDir, path.join("pages", "team-a.html")),
       checkPage(publicDir, path.join("pages", "team-b.html")),
       checkPage(publicDir, path.join("pages", "team-names.html")),
+      checkPage(publicDir, path.join("pages", "status.html")),
+      checkPage(publicDir, path.join("pages", "overlay-main.html")),
     ]);
 
     return {
@@ -83,6 +85,8 @@ function createFieldReadiness({ dataDir, obsDir, rulesPath, publicDir }) {
         obs: await diskInfo(obsDir),
       },
       paths: { dataDir, obsDir, rulesPath, publicDir },
+      broadcast: typeof getBroadcastHealth === "function" ? getBroadcastHealth() : null,
+      clients: typeof getClientSummary === "function" ? getClientSummary() : { total: 0, counts: {}, clients: [] },
       checks,
     };
   }
