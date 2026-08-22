@@ -27,9 +27,15 @@ All operator/field applications use one centralized realtime client/store per pa
 
 ## Realtime boundary
 
-Default namespace `/` carries the existing competition protocol and remains compatible with the current server event names.
+Default namespace `/` keeps the established competition event names. New clients declare an operational role in Socket.IO auth metadata, and the server registers only the command handlers that role needs:
 
-Every client declares a diagnostic role in the Socket.IO auth metadata. Roles are telemetry only; they are not an authentication mechanism because the product remains a trusted-LAN system.
+- `control`: match controls and result review/correction
+- `team-a`: scoring handlers restricted to Team A payloads
+- `team-b`: scoring handlers restricted to Team B payloads
+- `teams`: team administration and result deletion
+- `status`: no command handlers
+
+Legacy clients without role metadata retain the historical command surface for migration compatibility. Role metadata reduces accidental command exposure but is not authentication; the system remains designed for a trusted field LAN.
 
 The `/broadcast` namespace is intentionally one-way at the application level:
 
@@ -62,6 +68,10 @@ The application layer publishes `BroadcastState`; the adapter maps it to the exi
 
 This preserves compatibility with existing OBS Text Sources while allowing Browser Source overlays to coexist.
 
+`broadcast-service.js` is the broadcast composition boundary. Text-file output is required. An OBS control port is present but disabled by default and reports `OBS_CONTROL_NOT_CONFIGURED`; a future OBS WebSocket adapter can implement scene/source control without changing application or competition logic and without making OBS WebSocket a field dependency.
+
+`force-sync` refreshes operator clients, persists local text output and emits a fresh `broadcast:update` snapshot to Browser Source clients.
+
 ## Failure model
 
 Required for field operation:
@@ -75,7 +85,7 @@ Optional/non-authoritative:
 
 - Team A/B currently connected (they can reconnect/reload)
 - Browser Source overlay (legacy text output remains available)
-- future OBS WebSocket control-plane integration
+- OBS WebSocket control-plane integration
 
 The architecture deliberately does not make match operation dependent on OBS WebSocket.
 
