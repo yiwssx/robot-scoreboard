@@ -6,6 +6,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { projectBroadcastState } = require("../src/broadcast/broadcast-projector");
+const { createBroadcastService } = require("../src/broadcast/broadcast-service");
 const { TextFileBroadcastOutput, textFilesFromBroadcast } = require("../src/infrastructure/broadcast/text-file-output");
 const { createClientRegistry } = require("../src/sockets/client-registry");
 
@@ -39,16 +40,19 @@ test("text file adapter preserves legacy OBS filenames", () => {
   assert.equal(Object.keys(files).length, 18);
 });
 
-test("central text broadcast output writes local files independently", async () => {
+test("broadcast service keeps text output required and OBS WebSocket optional", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "broadcast-output-"));
   try {
     const output = new TextFileBroadcastOutput({ obsDir: root, debounceMs: 0 });
     await output.ensureDirectory();
-    output.publish(projectBroadcastState(source()), true);
-    await output.flushAll();
+    const service = createBroadcastService({ textOutput: output });
+    service.publish(projectBroadcastState(source()), true);
+    await service.flushAll();
     assert.equal(await fs.readFile(path.join(root, "score_a.txt"), "utf8"), "30");
-    assert.equal(output.health().ok, true);
-    assert.equal(output.health().localOnly, true);
+    assert.equal(service.health().ok, true);
+    assert.equal(service.health().localOnly, true);
+    assert.equal(service.health().obsControl.optional, true);
+    assert.equal(service.health().obsControl.configured, false);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

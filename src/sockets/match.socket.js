@@ -24,6 +24,7 @@ function registerMatchSocket({ io, socket, scoreboard, context, reply }) {
   socket.on("force-sync", async (callback) => {
     await scoreboard.forcePersist();
     io.emit("update", scoreboard.getUpdateData());
+    io.of("/broadcast").emit("broadcast:update", scoreboard.getBroadcastData());
     if (typeof callback === "function") callback({ synced: true, ok: true });
   });
 }

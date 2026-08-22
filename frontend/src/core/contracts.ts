@@ -53,10 +53,7 @@ export interface ScoreboardState {
   remainingSeconds: number;
   finalWarningSeconds: number;
   status: MatchStatus;
-  rules: {
-    scoreAdjustments: number[];
-    missions: Record<string, number>;
-  };
+  rules: { scoreAdjustments: number[]; missions: Record<string, number> };
 }
 
 export interface ActionReply {
@@ -79,20 +76,10 @@ export interface BroadcastTeam {
 export interface BroadcastState {
   version: number;
   generatedAt: string;
-  match: {
-    status: MatchStatus;
-    time: string;
-    timeElapsed: number;
-    remainingSeconds: number;
-    matchDuration: number;
-  };
+  match: { status: MatchStatus; time: string; timeElapsed: number; remainingSeconds: number; matchDuration: number };
   teamA: BroadcastTeam;
   teamB: BroadcastTeam;
-  result: {
-    winner: TeamSide | null;
-    winnerName: string;
-    locked: boolean;
-  };
+  result: { winner: TeamSide | null; winnerName: string; locked: boolean };
 }
 
 export interface ClientSummary {
@@ -119,13 +106,8 @@ export interface FieldDiagnostics {
     lastFlushAt: string | null;
     lastError: { message: string; code: string; at: string } | null;
     ok: boolean;
+    obsControl?: { transport: string; optional: boolean; configured: boolean; connected: boolean };
   } | null;
   clients: ClientSummary;
-  scoreboard: {
-    status: MatchStatus;
-    resultLocked: boolean;
-    teamNameA: string;
-    teamNameB: string;
-    time: string;
-  };
+  scoreboard: { status: MatchStatus; resultLocked: boolean; teamNameA: string; teamNameB: string; time: string };
 }

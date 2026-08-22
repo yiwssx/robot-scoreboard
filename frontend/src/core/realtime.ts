@@ -11,12 +11,45 @@ type SocketLike = {
 
 declare const io: (namespace?: string, options?: Record<string, unknown>) => SocketLike;
 
-function emitAck(socket: SocketLike, event: string, payload?: unknown): Promise<ActionReply> {
+type CommandPayloads = {
+  "start-time": undefined;
+  "stop-time": undefined;
+  "reset-score": undefined;
+  "reset-all": undefined;
+  "force-sync": undefined;
+  "add-score": { team: TeamSide; point: number };
+  "mission-score": { team: TeamSide; mission: number };
+  "mission-shot": { team: TeamSide; mission: number };
+  "end-with-bonus": { team: TeamSide };
+  "team-name-add": { name: string; school: string; weight: number | null };
+  "team-name-edit": { oldName: string; newName: string; school: string; weight: number | null };
+  "team-name-select": { team: TeamSide; name: string };
+  "team-name-delete": { name: string };
+  "team-names-show": undefined;
+  "team-names-hide": undefined;
+  "result-correction": Record<string, unknown>;
+  "result-finalize": undefined;
+  "match-result-delete": { id: string };
+};
+
+type CommandEvent = keyof CommandPayloads;
+
+function emitAck<E extends CommandEvent>(
+  socket: SocketLike,
+  event: E,
+  ...args: CommandPayloads[E] extends undefined ? [] : [payload: CommandPayloads[E]]
+): Promise<ActionReply> {
   return new Promise((resolve) => {
-    const ack: Ack = (reply) => resolve(reply || {});
-    if (payload === undefined) socket.emit(event, ack);
-    else socket.emit(event, payload, ack);
-    window.setTimeout(() => resolve({ ok: false, code: "TIMEOUT" }), 1800);
+    let settled = false;
+    const finish = (reply: ActionReply) => {
+      if (settled) return;
+      settled = true;
+      resolve(reply || {});
+    };
+    const ack: Ack = finish;
+    if (args.length === 0) socket.emit(event, ack);
+    else socket.emit(event, args[0], ack);
+    window.setTimeout(() => finish({ ok: false, code: "TIMEOUT" }), 1800);
   });
 }
 

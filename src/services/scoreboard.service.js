@@ -3,6 +3,7 @@
 const { normalizeRules } = require("../config/competition-rules");
 const { Persistence } = require("../infrastructure/persistence/file-store");
 const { TextFileBroadcastOutput } = require("../infrastructure/broadcast/text-file-output");
+const { createBroadcastService } = require("../broadcast/broadcast-service");
 const { EventLog } = require("../infrastructure/logging/event-log");
 const { createScoreboardState, STATUSES } = require("../application/scoreboard-state");
 const { createScoreboardRuntime } = require("../application/scoreboard-runtime");
@@ -11,11 +12,12 @@ const { createResultService } = require("./result.service");
 const { createMatchService } = require("./match.service");
 const { createScoringService } = require("./scoring.service");
 
-function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: suppliedRules = {} }) {
+function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: suppliedRules = {}, obsControl = null }) {
   const rules = normalizeRules(suppliedRules);
   const state = createScoreboardState(rules);
   const persistence = new Persistence({ dataDir, legacyObsDir: obsDir });
-  const broadcastOutput = new TextFileBroadcastOutput({ obsDir });
+  const textOutput = new TextFileBroadcastOutput({ obsDir });
+  const broadcastOutput = createBroadcastService({ textOutput, ...(obsControl ? { obsControl } : {}) });
   const eventLog = new EventLog(dataDir);
   const runtime = createScoreboardRuntime({ state, rules, persistence, broadcastOutput, eventLog, onUpdate });
 
@@ -25,7 +27,7 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: supplie
   const scoringService = createScoringService({ state, rules, runtime, matchService });
 
   async function initialize() {
-    await Promise.all([persistence.ensureDirectories(), broadcastOutput.ensureDirectory()]);
+    await Promise.all([persistence.ensureDirectories(), textOutput.ensureDirectory()]);
     await teamService.loadTeamData();
     await resultService.loadResults();
     const recovery = await matchService.loadLiveState();
