@@ -4,10 +4,12 @@ The repository uses GitHub Dependabot plus CI-gated automatic merging.
 
 ## Schedule
 
-- npm dependencies: every Monday at 09:00 Asia/Bangkok
-- GitHub Actions: every Monday at 09:15 Asia/Bangkok
+Routine dependency maintenance runs during the overnight maintenance window in Thailand:
 
-Dependabot groups minor and patch version updates so routine maintenance creates fewer pull requests. Major updates remain separate.
+- npm dependencies: every Monday at 03:00 Asia/Bangkok
+- GitHub Actions: every Monday at 03:15 Asia/Bangkok
+
+This keeps dependency PR creation, CI, and eligible automatic merges away from normal daytime field operation. Dependabot groups minor and patch version updates so routine maintenance creates fewer pull requests. Major updates remain separate.
 
 ## Merge policy
 
