@@ -33,6 +33,9 @@ jobs:
           gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
             -f name='dependency-major' -f color='B60205' \
             -f description='Major dependency update requiring manual review' >/dev/null 2>&1 || true
+          gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
+            -f name='dependency-hold' -f color='FBCA04' \
+            -f description='Temporarily block automatic dependency merge, for example during field freeze' >/dev/null 2>&1 || true
 
       - name: Classify update for automatic merge
         env:
