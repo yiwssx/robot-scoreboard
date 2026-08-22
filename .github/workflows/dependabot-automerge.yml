@@ -61,6 +61,10 @@ jobs:
             echo "PR #$PR_NUMBER is not marked automerge-safe; manual review required."
             exit 0
           fi
+          if jq -e 'index("dependency-hold") != null' <<<"$LABELS" >/dev/null; then
+            echo "PR #$PR_NUMBER is on dependency-hold; automatic merge is paused."
+            exit 0
+          fi
 
           echo "CI passed on exact head $HEAD_SHA; squash-merging Dependabot PR #$PR_NUMBER."
           RESULT="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
