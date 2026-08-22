@@ -6,7 +6,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "09:00"
+      time: "03:00"
       timezone: "Asia/Bangkok"
     open-pull-requests-limit: 5
     rebase-strategy: "auto"
@@ -26,7 +26,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "09:15"
+      time: "03:15"
       timezone: "Asia/Bangkok"
     open-pull-requests-limit: 5
     rebase-strategy: "auto"
