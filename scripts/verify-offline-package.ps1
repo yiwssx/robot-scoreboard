@@ -8,10 +8,17 @@ $required = @(
   "STOP-SCOREBOARD.cmd",
   "FIELD-CHECK.cmd",
   "OPEN-FIELD-STATUS.cmd",
+  "OPEN-OBS-OVERLAY.cmd",
   "BACKUP-SCOREBOARD.cmd",
   "RESTORE-SCOREBOARD.cmd",
   "README-OFFLINE.txt",
   "public\pages\status.html",
+  "public\pages\overlay-main.html",
+  "public\app\control.js",
+  "public\app\team.js",
+  "public\app\teams.js",
+  "public\app\status.js",
+  "public\app\overlay-main.js",
   "scripts\backup-scoreboard.ps1",
   "scripts\restore-scoreboard.ps1",
   "scripts\field-check.ps1",
@@ -23,4 +30,10 @@ foreach ($relative in $required) {
   if (-not (Test-Path $path)) { throw "Offline package missing: $relative" }
 }
 
-Write-Host "Offline package field-readiness contents verified."
+foreach ($devPackage in @("vite", "typescript", "preact", "@preact\preset-vite")) {
+  if (Test-Path (Join-Path $Stage "node_modules\$devPackage")) {
+    throw "Offline package unexpectedly contains frontend build dependency: $devPackage"
+  }
+}
+
+Write-Host "Offline package client/broadcast architecture contents verified."

@@ -7,63 +7,11 @@
   <link rel="stylesheet" href="/css/brand.css">
   <link rel="stylesheet" href="/css/pages/team-score.css">
   <link rel="stylesheet" href="/css/pages/team-b.css">
+  <link rel="stylesheet" href="/css/architecture.css">
 </head>
 <body class="team-b-page scoreboard-page" data-team="B">
-  <main class="panel">
-    <div class="brand-strip">
-      <img class="brand-logo" src="/assets/vec-seal.png" alt="R-VEC Robot Contest">
-      <div class="event-title">
-        <strong>TEAM B</strong>
-        <span>LIVE SCOREBOARD</span>
-      </div>
-      <img class="brand-seal" src="/assets/robot-contest-logo.png" alt="Vocational Education Commission">
-    </div>
-
-    <div class="top-row">
-      <h1 class="team-tag" id="teamNameB">TEAM B</h1>
-      <div class="status" id="status" data-state="STOP">STOP</div>
-    </div>
-
-    <div class="scoring-only-note">SCORING ONLY • START / STOP / RESET ใช้ที่ CONTROL PANEL</div>
-
-    <div class="score">
-      <span class="score-value" id="scoreB">0</span>
-      <div class="mission-shot-grid" aria-label="Mission shot times">
-        <div class="mission-shot"><span class="mission-label">ภารกิจ 1</span><span class="mission-time" id="missionShotB1">--.--</span></div>
-        <div class="mission-shot"><span class="mission-label">ภารกิจ 2</span><span class="mission-time" id="missionShotB2">--.--</span></div>
-        <div class="mission-shot"><span class="mission-label">ภารกิจ 3</span><span class="mission-time" id="missionShotB3">--.--</span></div>
-        <div class="mission-shot"><span class="mission-label">ภารกิจ 4</span><span class="mission-time" id="missionShotB4">--.--</span></div>
-      </div>
-    </div>
-
-    <div class="time" id="time">00.00</div>
-    <div class="shot-readout">
-      <span class="shot-label">SHOT</span>
-      <span class="shot-time" id="shotB">--.--</span>
-    </div>
-
-    <div class="mission-button-grid">
-      <button class="mission-button" data-mission="1"><span>ภารกิจ 1</span>+10</button>
-      <button class="mission-shot-button" data-shot-mission="1"><span>ภารกิจ 1</span>SHOT</button>
-      <button class="mission-button" data-mission="2"><span>ภารกิจ 2</span>+20</button>
-      <button class="mission-shot-button" data-shot-mission="2"><span>ภารกิจ 2</span>SHOT</button>
-      <button class="mission-button" data-mission="3"><span>ภารกิจ 3</span>+20</button>
-      <button class="mission-shot-button" data-shot-mission="3"><span>ภารกิจ 3</span>SHOT</button>
-      <button class="mission-button end" id="endMatchButton"><span>ภารกิจ 4</span>+20 END</button>
-      <button class="mission-shot-button" data-shot-mission="4"><span>ภารกิจ 4</span>SHOT</button>
-    </div>
-
-    <div class="button-grid">
-      <button class="plus" data-score="10">+10</button>
-      <button class="plus" data-score="20">+20</button>
-      <button class="minus" data-score="-10">-10</button>
-      <button class="minus" data-score="-20">-20</button>
-    </div>
-  </main>
-
+  <div id="app"><main class="panel"><h1>TEAM B</h1><p>SCORING ONLY · Loading…</p></main></div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/common/final-warning.js"></script>
-  <script src="/js/pages/team-score.js"></script>
-  <script src="/js/common/notifications.js"></script>
+  <script type="module" src="/app/team.js"></script>
 </body>
 </html>

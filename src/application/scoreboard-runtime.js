@@ -7,8 +7,9 @@ const {
   normalizeMissionShots,
   formatTime,
 } = require("../domain");
+const { projectBroadcastState } = require("../broadcast/broadcast-projector");
 
-function createScoreboardRuntime({ state, rules, persistence, eventLog, onUpdate }) {
+function createScoreboardRuntime({ state, rules, persistence, broadcastOutput, eventLog, onUpdate }) {
   function contextFields(context) {
     const safe = context && typeof context === "object" ? context : {};
     return {
@@ -164,33 +165,20 @@ function createScoreboardRuntime({ state, rules, persistence, eventLog, onUpdate
     };
   }
 
-  function obsValues() {
-    const values = {
-      "score_a.txt": state.scoreA,
-      "score_b.txt": state.scoreB,
-      "time.txt": formatTime(state.timeElapsed),
-      "shot_a.txt": state.shotA,
-      "shot_b.txt": state.shotB,
-      "status.txt": state.status,
-      "team-name-a.text": state.teamNamesVisible ? state.teamNameA : "",
-      "team-name-b.text": state.teamNamesVisible ? state.teamNameB : "",
-      "nameschool-a.text": state.teamNamesVisible ? getTeamSchool(state.teamNameA) : "",
-      "nameschool-b.text": state.teamNamesVisible ? getTeamSchool(state.teamNameB) : "",
-    };
-    normalizeMissionShots(state.missionShotsA).forEach((value, i) => { values[`mission_shot_a_${i + 1}.txt`] = value; });
-    normalizeMissionShots(state.missionShotsB).forEach((value, i) => { values[`mission_shot_b_${i + 1}.txt`] = value; });
-    return values;
+  function broadcastSnapshot(data = null) {
+    return projectBroadcastState(data || updateData());
   }
 
-  function persist(forceObs = false) {
+  function persist(forceBroadcast = false, data = null) {
     persistence.queueJson("live-match-state.json", livePersistenceData());
-    persistence.queueObs(obsValues(), forceObs);
+    broadcastOutput.publish(broadcastSnapshot(data), forceBroadcast);
   }
 
   function emit() {
     const data = updateData();
-    onUpdate(data);
-    persist(false);
+    const broadcast = broadcastSnapshot(data);
+    onUpdate(data, broadcast);
+    persist(false, data);
     return data;
   }
 
@@ -208,7 +196,7 @@ function createScoreboardRuntime({ state, rules, persistence, eventLog, onUpdate
     saveResults,
     livePersistenceData,
     updateData,
-    obsValues,
+    broadcastSnapshot,
     persist,
     emit,
   };

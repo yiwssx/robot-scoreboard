@@ -1,24 +1,33 @@
 {
   "name": "robot-scoreboard",
   "version": "1.0.0",
-  "description": "Offline trusted-LAN realtime competition scoreboard with OBS integration",
+  "description": "Offline trusted-LAN realtime competition scoreboard with local OBS broadcast integration",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node scripts/check-js.js",
+    "dev:frontend": "vite --config frontend/vite.config.ts",
+    "build:frontend": "vite build --config frontend/vite.config.ts",
+    "typecheck:frontend": "tsc -p frontend/tsconfig.json --noEmit",
+    "check": "node scripts/check-js.js && npm run typecheck:frontend",
     "test": "node --test test/*.test.js",
     "stress:obs": "node scripts/stress-obs.js",
     "build:offline:windows": "powershell -ExecutionPolicy Bypass -File scripts/build-offline-windows.ps1"
   },
-  "keywords": ["scoreboard", "robot", "socket.io", "obs", "offline"],
+  "keywords": ["scoreboard", "robot", "socket.io", "obs", "offline", "preact", "typescript"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   },
   "dependencies": {
     "express": "^5.2.1",
     "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.6",
+    "preact": "10.29.8",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
   }
 }

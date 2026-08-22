@@ -13,12 +13,14 @@ function createPagesRouter({ publicDir }) {
   router.get("/team/b", pages.teamB);
   router.get("/teams", pages.teams);
   router.get("/status", pages.status);
+  router.get("/overlay/main", pages.overlayMain);
 
   router.get("/control.html", (req, res) => res.redirect(308, "/control"));
   router.get("/team-a.html", (req, res) => res.redirect(308, "/team/a"));
   router.get("/team-b.html", (req, res) => res.redirect(308, "/team/b"));
   router.get("/team-names.html", (req, res) => res.redirect(308, "/teams"));
   router.get("/status.html", (req, res) => res.redirect(308, "/status"));
+  router.get("/overlay", (req, res) => res.redirect(308, "/overlay/main"));
 
   return router;
 }

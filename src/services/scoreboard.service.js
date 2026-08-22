@@ -2,6 +2,8 @@
 
 const { normalizeRules } = require("../config/competition-rules");
 const { Persistence } = require("../infrastructure/persistence/file-store");
+const { TextFileBroadcastOutput } = require("../infrastructure/broadcast/text-file-output");
+const { createBroadcastService } = require("../broadcast/broadcast-service");
 const { EventLog } = require("../infrastructure/logging/event-log");
 const { createScoreboardState, STATUSES } = require("../application/scoreboard-state");
 const { createScoreboardRuntime } = require("../application/scoreboard-runtime");
@@ -10,12 +12,14 @@ const { createResultService } = require("./result.service");
 const { createMatchService } = require("./match.service");
 const { createScoringService } = require("./scoring.service");
 
-function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: suppliedRules = {} }) {
+function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: suppliedRules = {}, obsControl = null }) {
   const rules = normalizeRules(suppliedRules);
   const state = createScoreboardState(rules);
-  const persistence = new Persistence({ dataDir, obsDir });
+  const persistence = new Persistence({ dataDir, legacyObsDir: obsDir });
+  const textOutput = new TextFileBroadcastOutput({ obsDir });
+  const broadcastOutput = createBroadcastService({ textOutput, ...(obsControl ? { obsControl } : {}) });
   const eventLog = new EventLog(dataDir);
-  const runtime = createScoreboardRuntime({ state, rules, persistence, eventLog, onUpdate });
+  const runtime = createScoreboardRuntime({ state, rules, persistence, broadcastOutput, eventLog, onUpdate });
 
   const teamService = createTeamService({ state, persistence, runtime });
   const resultService = createResultService({ state, rules, persistence, runtime });
@@ -23,14 +27,14 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: supplie
   const scoringService = createScoringService({ state, rules, runtime, matchService });
 
   async function initialize() {
-    await persistence.ensureDirectories();
+    await Promise.all([persistence.ensureDirectories(), textOutput.ensureDirectory()]);
     await teamService.loadTeamData();
     await resultService.loadResults();
     const recovery = await matchService.loadLiveState();
     runtime.saveTeamData();
     runtime.saveResults();
     runtime.persist(true);
-    await persistence.flushAll();
+    await Promise.all([persistence.flushAll(), broadcastOutput.flushAll()]);
     runtime.log("SERVER_READY", { recovery, rules });
     await eventLog.flush();
   }
@@ -43,12 +47,12 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: supplie
     matchService.clearTimer();
     runtime.log("SERVER_SHUTDOWN", {}, context);
     runtime.persist(false);
-    await Promise.all([persistence.flushAll(), eventLog.flush()]);
+    await Promise.all([persistence.flushAll(), broadcastOutput.flushAll(), eventLog.flush()]);
   }
 
   async function forcePersist() {
     runtime.persist(true);
-    await Promise.all([persistence.flushAll(), eventLog.flush()]);
+    await Promise.all([persistence.flushAll(), broadcastOutput.flushAll(), eventLog.flush()]);
   }
 
   return {
@@ -56,6 +60,8 @@ function createScoreboard({ dataDir, obsDir, onUpdate = () => {}, rules: supplie
     shutdown,
     forcePersist,
     getUpdateData: runtime.updateData,
+    getBroadcastData: runtime.broadcastSnapshot,
+    getBroadcastHealth: () => broadcastOutput.health(),
     addScore: scoringService.addScore,
     missionScore: scoringService.missionScore,
     missionShot: scoringService.missionShot,
