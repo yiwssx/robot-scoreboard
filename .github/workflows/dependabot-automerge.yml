@@ -1,0 +1,72 @@
+name: Dependabot Auto Merge
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge safe Dependabot update after exact-head CI success
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          case "$HEAD_BRANCH" in
+            dependabot/*) ;;
+            *) echo "Not a Dependabot branch; nothing to do."; exit 0 ;;
+          esac
+
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          PR_JSON="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f state='open' -f head="$OWNER:$HEAD_BRANCH")"
+          PR_COUNT="$(jq 'length' <<<"$PR_JSON")"
+          if [ "$PR_COUNT" -ne 1 ]; then
+            echo "Expected one open PR for $HEAD_BRANCH, found $PR_COUNT; skipping."
+            exit 0
+          fi
+
+          PR_NUMBER="$(jq -r '.[0].number' <<<"$PR_JSON")"
+          PR_USER="$(jq -r '.[0].user.login' <<<"$PR_JSON")"
+          PR_HEAD_SHA="$(jq -r '.[0].head.sha' <<<"$PR_JSON")"
+          PR_BASE="$(jq -r '.[0].base.ref' <<<"$PR_JSON")"
+
+          if [ "$PR_USER" != 'dependabot[bot]' ]; then
+            echo "PR #$PR_NUMBER is not owned by Dependabot; skipping."
+            exit 0
+          fi
+          if [ "$PR_BASE" != 'main' ]; then
+            echo "PR #$PR_NUMBER does not target main; skipping."
+            exit 0
+          fi
+          if [ "$PR_HEAD_SHA" != "$HEAD_SHA" ]; then
+            echo "CI result is stale for PR #$PR_NUMBER; current head differs."
+            exit 0
+          fi
+
+          LABELS="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER" --jq '[.labels[].name]')"
+          if ! jq -e 'index("automerge-safe") != null' <<<"$LABELS" >/dev/null; then
+            echo "PR #$PR_NUMBER is not marked automerge-safe; manual review required."
+            exit 0
+          fi
+
+          echo "CI passed on exact head $HEAD_SHA; squash-merging Dependabot PR #$PR_NUMBER."
+          RESULT="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
+            -f merge_method='squash' -f sha="$HEAD_SHA")"
+          if [ "$(jq -r '.merged' <<<"$RESULT")" != 'true' ]; then
+            echo "$RESULT"
+            exit 1
+          fi
+          echo "Dependabot PR #$PR_NUMBER merged successfully."
