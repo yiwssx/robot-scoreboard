@@ -22,6 +22,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - run: npm run build:frontend
       - run: npm run check
       - run: npm test
       - run: npm audit --audit-level=high
@@ -35,6 +36,7 @@ jobs:
           node-version: 22.x
           cache: npm
       - run: npm ci
+      - run: npm run build:frontend
       - run: npm run check
       - run: npm test
       - run: npm run stress:obs

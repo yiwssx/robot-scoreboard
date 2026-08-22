@@ -7,6 +7,14 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Stage = Join-Path $OutputDir "robot-scoreboard-windows-x64"
 $Zip = Join-Path $OutputDir "robot-scoreboard-windows-x64.zip"
 
+Push-Location $Root
+try {
+  & npm run build:frontend
+  if ($LASTEXITCODE -ne 0) { throw "Frontend build failed with exit code $LASTEXITCODE" }
+} finally {
+  Pop-Location
+}
+
 if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
 if (Test-Path $Zip) { Remove-Item $Zip -Force }
 New-Item -ItemType Directory -Force -Path $Stage, (Join-Path $Stage "runtime"), (Join-Path $Stage "data"), (Join-Path $Stage "obs"), (Join-Path $Stage "backups"), (Join-Path $Stage "scripts") | Out-Null
@@ -17,6 +25,14 @@ foreach ($item in $copyItems) {
 }
 foreach ($scriptName in @("backup-scoreboard.ps1", "restore-scoreboard.ps1", "field-check.ps1")) {
   Copy-Item (Join-Path $Root "scripts\$scriptName") -Destination (Join-Path $Stage "scripts\$scriptName") -Force
+}
+
+Push-Location $Stage
+try {
+  & npm prune --omit=dev --ignore-scripts
+  if ($LASTEXITCODE -ne 0) { throw "Runtime dependency prune failed with exit code $LASTEXITCODE" }
+} finally {
+  Pop-Location
 }
 
 $nodeExe = (Get-Command node.exe).Source
@@ -77,21 +93,34 @@ start "" "http://localhost:3000/status"
 '@ | Set-Content -Path (Join-Path $Stage "OPEN-FIELD-STATUS.cmd") -Encoding ASCII
 
 @'
+@echo off
+start "" "http://127.0.0.1:3000/overlay/main"
+'@ | Set-Content -Path (Join-Path $Stage "OPEN-OBS-OVERLAY.cmd") -Encoding ASCII
+
+@'
 ROBOT SCOREBOARD - OFFLINE WINDOWS PACKAGE
 
-1. แตก ZIP ลงเครื่องแม่
+CENTRAL MACHINE ONLY
+1. แตก ZIP ลงเครื่องกลางที่ใช้ Scoreboard + OBS
 2. ดับเบิลคลิก START-SCOREBOARD.cmd
 3. Control: http://localhost:3000/control
 4. Field Status: http://localhost:3000/status
-5. Team A: http://IP-เครื่องแม่:3000/team/a
-6. Team B: http://IP-เครื่องแม่:3000/team/b
-7. Team setup: http://IP-เครื่องแม่:3000/teams
-8. FIELD-CHECK.cmd = ตรวจ machine readiness
-9. BACKUP-SCOREBOARD.cmd = สำรอง data/obs/config
-10. RESTORE-SCOREBOARD.cmd = กู้ backup (ต้อง STOP server ก่อน)
-11. ไม่ต้องติดตั้ง Node.js และไม่ต้อง npm install
-12. เก็บ data/, obs/ และ backups/ ไว้เมื่ออัปเดตเวอร์ชัน
-13. ห้าม port-forward TCP 3000 ออก Internet
+5. OBS Browser Source: http://127.0.0.1:3000/overlay/main
+6. OBS text-file fallback/primary output: .\obs\
+
+FIELD CLIENTS
+7. Team A: http://IP-เครื่องกลาง:3000/team/a
+8. Team B: http://IP-เครื่องกลาง:3000/team/b
+9. Team setup: http://IP-เครื่องกลาง:3000/teams
+10. เครื่อง Team A/B ไม่ต้องมี OBS, Node.js หรือ npm
+
+OPERATIONS
+11. FIELD-CHECK.cmd = ตรวจ central-machine readiness
+12. BACKUP-SCOREBOARD.cmd = สำรอง data/obs/config
+13. RESTORE-SCOREBOARD.cmd = กู้ backup (ต้อง STOP server ก่อน)
+14. ไม่ต้องติดตั้ง Node.js และไม่ต้อง npm install ที่เครื่องสนาม
+15. เก็บ data/, obs/ และ backups/ ไว้เมื่ออัปเดตเวอร์ชัน
+16. ห้าม port-forward TCP 3000 ออก Internet
 '@ | Set-Content -Path (Join-Path $Stage "README-OFFLINE.txt") -Encoding UTF8
 
 Compress-Archive -Path (Join-Path $Stage "*") -DestinationPath $Zip -CompressionLevel Optimal

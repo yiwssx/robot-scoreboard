@@ -26,13 +26,13 @@ async function checkJsonFile(name, filePath) {
   }
 }
 
-async function checkPage(publicDir, relativePath) {
+async function checkAsset(publicDir, relativePath) {
   const filePath = path.join(publicDir, relativePath);
   try {
     await fs.access(filePath);
-    return { name: `page:${relativePath}`, ok: true, detail: filePath };
+    return { name: `asset:${relativePath.replaceAll("\\", "/")}`, ok: true, detail: filePath };
   } catch (error) {
-    return { name: `page:${relativePath}`, ok: false, detail: `${filePath}: ${error.message}` };
+    return { name: `asset:${relativePath.replaceAll("\\", "/")}`, ok: false, detail: `${filePath}: ${error.message}` };
   }
 }
 
@@ -58,19 +58,37 @@ function lanAddresses() {
   return addresses;
 }
 
+const REQUIRED_PUBLIC_ASSETS = Object.freeze([
+  path.join("pages", "control.html"),
+  path.join("pages", "team-a.html"),
+  path.join("pages", "team-b.html"),
+  path.join("pages", "team-names.html"),
+  path.join("pages", "status.html"),
+  path.join("pages", "overlay-main.html"),
+  path.join("app", "control.js"),
+  path.join("app", "team.js"),
+  path.join("app", "teams.js"),
+  path.join("app", "status.js"),
+  path.join("app", "overlay-main.js"),
+]);
+
 function createFieldReadiness({ dataDir, obsDir, rulesPath, publicDir, getClientSummary = null, getBroadcastHealth = null }) {
   async function inspect() {
+    const broadcast = typeof getBroadcastHealth === "function" ? getBroadcastHealth() : null;
     const checks = await Promise.all([
       checkWritableDirectory("data-writable", dataDir),
       checkWritableDirectory("obs-writable", obsDir),
       checkJsonFile("competition-rules", rulesPath),
-      checkPage(publicDir, path.join("pages", "control.html")),
-      checkPage(publicDir, path.join("pages", "team-a.html")),
-      checkPage(publicDir, path.join("pages", "team-b.html")),
-      checkPage(publicDir, path.join("pages", "team-names.html")),
-      checkPage(publicDir, path.join("pages", "status.html")),
-      checkPage(publicDir, path.join("pages", "overlay-main.html")),
+      ...REQUIRED_PUBLIC_ASSETS.map((relativePath) => checkAsset(publicDir, relativePath)),
     ]);
+
+    if (broadcast) {
+      checks.push({
+        name: "broadcast-text-output",
+        ok: Boolean(broadcast.ok),
+        detail: broadcast.ok ? `${broadcast.fileCount || 0} local OBS text outputs ready` : String(broadcast.lastError && broadcast.lastError.message || "broadcast output error"),
+      });
+    }
 
     return {
       ok: checks.every((check) => check.ok),
@@ -85,7 +103,7 @@ function createFieldReadiness({ dataDir, obsDir, rulesPath, publicDir, getClient
         obs: await diskInfo(obsDir),
       },
       paths: { dataDir, obsDir, rulesPath, publicDir },
-      broadcast: typeof getBroadcastHealth === "function" ? getBroadcastHealth() : null,
+      broadcast,
       clients: typeof getClientSummary === "function" ? getClientSummary() : { total: 0, counts: {}, clients: [] },
       checks,
     };
@@ -94,4 +112,4 @@ function createFieldReadiness({ dataDir, obsDir, rulesPath, publicDir, getClient
   return { inspect };
 }
 
-module.exports = { createFieldReadiness };
+module.exports = { createFieldReadiness, REQUIRED_PUBLIC_ASSETS };
