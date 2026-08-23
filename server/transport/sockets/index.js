@@ -27,13 +27,15 @@ function registerRoleCommands(role, transport) {
     registerResultSocket({ ...transport, allowCorrections: false, allowDelete: true });
     return;
   }
-  if (role === "status") return;
+  if (role === "status" || role === "unknown") return;
 
-  // Legacy clients without role metadata keep the historical command surface.
-  registerMatchSocket(transport);
-  registerScoringSocket(transport);
-  registerTeamSocket(transport);
-  registerResultSocket(transport);
+  if (role === "legacy") {
+    // Backward compatibility is granted only to clients that omit role metadata entirely.
+    registerMatchSocket(transport);
+    registerScoringSocket(transport);
+    registerTeamSocket(transport);
+    registerResultSocket(transport);
+  }
 }
 
 function registerSockets(io, scoreboard, clientRegistry = null) {

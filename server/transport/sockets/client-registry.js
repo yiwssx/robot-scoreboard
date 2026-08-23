@@ -1,10 +1,11 @@
 "use strict";
 
-const ALLOWED_ROLES = new Set(["control", "team-a", "team-b", "teams", "status", "overlay", "unknown"]);
+const DECLARED_ROLES = new Set(["control", "team-a", "team-b", "teams", "status", "overlay"]);
 
 function normalizeRole(value) {
-  const role = String(value || "").trim().toLowerCase();
-  return ALLOWED_ROLES.has(role) ? role : "unknown";
+  const role = value === undefined || value === null ? "" : String(value).trim().toLowerCase();
+  if (!role) return "legacy";
+  return DECLARED_ROLES.has(role) ? role : "unknown";
 }
 
 function socketAddress(socket) {
@@ -19,10 +20,11 @@ function createClientRegistry() {
   const clients = new Map();
 
   function connect(socket, { namespace = "/", role = "unknown" } = {}) {
+    const normalizedRole = role === "legacy" ? "legacy" : normalizeRole(role);
     const entry = {
       id: socket.id,
       namespace,
-      role: normalizeRole(role),
+      role: normalizedRole,
       address: socketAddress(socket),
       connectedAt: new Date().toISOString(),
     };

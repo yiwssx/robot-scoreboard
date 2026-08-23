@@ -4,6 +4,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { Server } = require("socket.io");
 const { loadEnvironment } = require("./config/env");
+const { migrateLegacyLayout } = require("./config/legacy-layout");
 const { loadCompetitionRules } = require("./config/competition-rules");
 const { createScoreboard } = require("./competition/use-cases/scoreboard.service");
 const { createFieldReadiness } = require("./diagnostics/field-readiness");
@@ -13,6 +14,10 @@ const { createClientRegistry } = require("./transport/sockets/client-registry");
 
 const projectRoot = path.resolve(__dirname, "..");
 const env = loadEnvironment(projectRoot);
+const migration = migrateLegacyLayout(projectRoot, env);
+if (migration.migrated.length > 0) {
+  console.log(`Migrated legacy field layout into runtime/: ${migration.migrated.join(", ")}`);
+}
 const rules = loadCompetitionRules(env.rulesPath);
 const clientRegistry = createClientRegistry();
 
@@ -55,8 +60,14 @@ async function bootstrap() {
 
 async function shutdown(signal) {
   console.log(`Received ${signal}; pausing and saving scoreboard state...`);
-  await scoreboard.shutdown({ page: "server", socketId: signal });
-  server.close(() => process.exit(0));
+  let exitCode = 0;
+  try {
+    await scoreboard.shutdown({ page: "server", socketId: signal });
+  } catch (error) {
+    exitCode = 1;
+    console.error("Scoreboard shutdown persistence failed:", error);
+  }
+  server.close(() => process.exit(exitCode));
   setTimeout(() => process.exit(1), 3000).unref();
 }
 
