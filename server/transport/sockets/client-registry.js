@@ -20,10 +20,11 @@ function createClientRegistry() {
   const clients = new Map();
 
   function connect(socket, { namespace = "/", role = "unknown" } = {}) {
+    const normalizedRole = role === "legacy" ? "legacy" : normalizeRole(role);
     const entry = {
       id: socket.id,
       namespace,
-      role: normalizeRole(role),
+      role: normalizedRole,
       address: socketAddress(socket),
       connectedAt: new Date().toISOString(),
     };
