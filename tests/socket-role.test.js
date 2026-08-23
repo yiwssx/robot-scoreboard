@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { registerRoleCommands } = require("../server/transport/sockets");
-const { normalizeRole } = require("../server/transport/sockets/client-registry");
+const { createClientRegistry, normalizeRole } = require("../server/transport/sockets/client-registry");
 const { registerScoringSocket } = require("../server/transport/sockets/scoring.socket");
 
 function fakeSocket() {
@@ -61,6 +61,14 @@ test("legacy compatibility requires omitted role metadata; invalid roles receive
   const unknown = fakeSocket();
   registerRoleCommands("unknown", transport(unknown));
   assert.equal(unknown.handlers.size, 0);
+});
+
+test("client registry preserves an already-normalized legacy role for diagnostics", () => {
+  const registry = createClientRegistry();
+  registry.connect({ id: "legacy-1", handshake: {} }, { role: "legacy" });
+  const summary = registry.summary();
+  assert.equal(summary.counts.legacy, 1);
+  assert.equal(summary.clients[0].role, "legacy");
 });
 
 test("team scoring transport rejects a payload for the other side", () => {
