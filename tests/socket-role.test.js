@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { registerRoleCommands } = require("../server/transport/sockets");
+const { normalizeRole } = require("../server/transport/sockets/client-registry");
 const { registerScoringSocket } = require("../server/transport/sockets/scoring.socket");
 
 function fakeSocket() {
@@ -45,6 +46,21 @@ test("client roles expose only their intended command surface", () => {
   const status = fakeSocket();
   registerRoleCommands("status", transport(status));
   assert.equal(status.handlers.size, 0);
+});
+
+test("legacy compatibility requires omitted role metadata; invalid roles receive no command surface", () => {
+  assert.equal(normalizeRole(undefined), "legacy");
+  assert.equal(normalizeRole(""), "legacy");
+  assert.equal(normalizeRole("not-a-real-role"), "unknown");
+
+  const legacy = fakeSocket();
+  registerRoleCommands("legacy", transport(legacy));
+  assert.equal(legacy.handlers.has("start-time"), true);
+  assert.equal(legacy.handlers.has("add-score"), true);
+
+  const unknown = fakeSocket();
+  registerRoleCommands("unknown", transport(unknown));
+  assert.equal(unknown.handlers.size, 0);
 });
 
 test("team scoring transport rejects a payload for the other side", () => {

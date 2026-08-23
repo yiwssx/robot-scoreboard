@@ -19,6 +19,7 @@ class AtomicWriteQueue {
     this.pendingWrites = new Map();
     this.writeTimer = null;
     this.writeChain = Promise.resolve();
+    this.lastError = null;
   }
 
   queue(filePath, content) {
@@ -69,8 +70,12 @@ class AtomicWriteQueue {
 
     this.writeChain = this.writeChain
       .then(() => Promise.all(batch.map(([filePath, content]) => this.atomicWrite(filePath, content))))
-      .then(() => this.onFlush({ count: batch.length, at: new Date().toISOString() }))
+      .then(() => {
+        this.lastError = null;
+        this.onFlush({ count: batch.length, at: new Date().toISOString() });
+      })
       .catch((error) => {
+        this.lastError = error;
         this.onError(error);
       });
 
@@ -90,6 +95,7 @@ class AtomicWriteQueue {
     }
     while (this.pendingWrites.size > 0) await this.flushPendingWrites();
     await this.writeChain;
+    if (this.lastError) throw this.lastError;
   }
 }
 

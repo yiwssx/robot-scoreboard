@@ -34,6 +34,8 @@ class TextFileBroadcastOutput {
       debounceMs,
       maxWriteRetries,
       onError: (error) => {
+        // The desired-value cache must not suppress the next retry after a failed write batch.
+        this.lastValues.clear();
         this.lastError = { message: error.message, code: error.code || "UNKNOWN", at: new Date().toISOString() };
         console.error("Broadcast text output failed:", error);
       },
