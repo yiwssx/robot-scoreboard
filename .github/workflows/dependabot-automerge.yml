@@ -16,7 +16,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Merge safe Dependabot update after exact-head CI success
+      - name: Merge safe direct Dependabot update after exact-head CI success
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -57,8 +57,16 @@ jobs:
           fi
 
           LABELS="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER" --jq '[.labels[].name]')"
+          if ! jq -e 'index("dependency-direct") != null' <<<"$LABELS" >/dev/null; then
+            echo "PR #$PR_NUMBER is not confirmed as a direct dependency update; automatic merge is forbidden."
+            exit 0
+          fi
           if ! jq -e 'index("automerge-safe") != null' <<<"$LABELS" >/dev/null; then
             echo "PR #$PR_NUMBER is not marked automerge-safe; manual review required."
+            exit 0
+          fi
+          if jq -e 'index("dependency-indirect-blocked") != null' <<<"$LABELS" >/dev/null; then
+            echo "PR #$PR_NUMBER is an indirect/transitive update; automatic merge is forbidden."
             exit 0
           fi
           if jq -e 'index("dependency-hold") != null' <<<"$LABELS" >/dev/null; then
@@ -66,7 +74,7 @@ jobs:
             exit 0
           fi
 
-          echo "CI passed on exact head $HEAD_SHA; squash-merging Dependabot PR #$PR_NUMBER."
+          echo "CI passed on exact head $HEAD_SHA; squash-merging direct Dependabot PR #$PR_NUMBER."
           RESULT="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
             -f merge_method='squash' -f sha="$HEAD_SHA")"
           if [ "$(jq -r '.merged' <<<"$RESULT")" != 'true' ]; then
