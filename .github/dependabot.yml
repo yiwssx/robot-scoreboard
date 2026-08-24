@@ -10,6 +10,9 @@ updates:
       timezone: "Asia/Bangkok"
     open-pull-requests-limit: 5
     rebase-strategy: "auto"
+    versioning-strategy: "increase"
+    allow:
+      - dependency-type: "direct"
     commit-message:
       prefix: "chore(deps)"
     groups:
