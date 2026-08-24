@@ -18,12 +18,49 @@ jobs:
         with:
           node-version: 22.x
           cache: npm
+
+      - name: Verify tag matches package version
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $expected = "v$version"
+          if ("${{ github.ref_name }}" -ne $expected) {
+            throw "Release tag ${{ github.ref_name }} does not match package.json version $version. Expected $expected."
+          }
+
       - run: npm ci
       - run: npm run build:client
+      - run: npm run check
       - run: npm test
+      - run: npm run stress:obs
+
+      - name: Run live field self-test
+        shell: pwsh
+        run: |
+          $server = Start-Process node -ArgumentList 'server/main.js' -PassThru
+          try {
+            Start-Sleep -Seconds 2
+            & tools/field/field-check.ps1
+            if ($LASTEXITCODE -ne 0) { throw "Field check failed with exit code $LASTEXITCODE" }
+          } finally {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Run backup/restore drill
+        shell: pwsh
+        run: ./tests/field/backup-restore.ps1
+
+      - run: npm audit --audit-level=high
+
       - name: Build self-contained offline ZIP
         shell: pwsh
         run: ./tools/release/build-offline-windows.ps1 -OutputDir "$env:RUNNER_TEMP\scoreboard-release"
+
+      - name: Verify staged offline package
+        shell: pwsh
+        run: ./tools/release/verify-offline-package.ps1 -Stage "$env:RUNNER_TEMP\scoreboard-release\robot-scoreboard-windows-x64"
+
       - uses: actions/upload-artifact@v4
         with:
           name: robot-scoreboard-windows-x64
