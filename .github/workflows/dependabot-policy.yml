@@ -28,6 +28,12 @@ jobs:
             -f name='dependencies' -f color='0366D6' \
             -f description='Dependency update' >/dev/null 2>&1 || true
           gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
+            -f name='dependency-direct' -f color='0E8A16' \
+            -f description='Direct dependency declared in the project manifest' >/dev/null 2>&1 || true
+          gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
+            -f name='dependency-indirect-blocked' -f color='B60205' \
+            -f description='Indirect/transitive dependency update blocked by project policy' >/dev/null 2>&1 || true
+          gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
             -f name='automerge-safe' -f color='0E8A16' \
             -f description='Dependabot patch/minor update eligible for automatic merge after CI' >/dev/null 2>&1 || true
           gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
@@ -37,7 +43,36 @@ jobs:
             -f name='dependency-hold' -f color='FBCA04' \
             -f description='Temporarily block automatic dependency merge, for example during field freeze' >/dev/null 2>&1 || true
 
+      - name: Enforce direct-only npm dependency policy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PACKAGE_ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          DEPENDENCY_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+        run: |
+          set -euo pipefail
+
+          if [ "$PACKAGE_ECOSYSTEM" != "npm" ]; then
+            exit 0
+          fi
+
+          case "$DEPENDENCY_TYPE" in
+            direct:production|direct:development)
+              gh pr edit "$PR_URL" --add-label "dependency-direct"
+              gh pr edit "$PR_URL" --remove-label "dependency-indirect-blocked" >/dev/null 2>&1 || true
+              ;;
+            *)
+              gh pr edit "$PR_URL" --add-label "dependencies,dependency-indirect-blocked,dependency-hold"
+              gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
+              gh pr close "$PR_URL" --comment "Closed automatically: this project updates only direct npm dependencies declared in package.json. Indirect/transitive dependencies must move only as required by an approved direct dependency update."
+              ;;
+          esac
+
       - name: Classify update for automatic merge
+        if: >-
+          steps.metadata.outputs.package-ecosystem != 'npm' ||
+          steps.metadata.outputs.dependency-type == 'direct:production' ||
+          steps.metadata.outputs.dependency-type == 'direct:development'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
