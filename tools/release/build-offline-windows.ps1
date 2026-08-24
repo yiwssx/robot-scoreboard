@@ -44,22 +44,144 @@ $nodeExe = (Get-Command node.exe).Source
 Copy-Item $nodeExe (Join-Path $Stage "bin\node.exe") -Force
 
 @'
+param(
+  [int]$Port = 3000,
+  [string]$ListenHost = "0.0.0.0",
+  [switch]$NoBrowser
+)
+
+$ErrorActionPreference = "Stop"
+$Root = $PSScriptRoot
+$RuntimeDir = Join-Path $Root "runtime"
+$PidFile = Join-Path $RuntimeDir "scoreboard.pid.json"
+$NodeExe = Join-Path $Root "bin\node.exe"
+$ServerScript = Join-Path $Root "server\main.js"
+New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+
+function Test-ScoreboardProcess([int]$ProcessId) {
+  $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+  if (-not $process) { return $false }
+
+  try {
+    $info = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop
+    $expectedNode = [IO.Path]::GetFullPath($NodeExe)
+    $actualNode = if ($info.ExecutablePath) { [IO.Path]::GetFullPath([string]$info.ExecutablePath) } else { "" }
+    $serverNeedle = [IO.Path]::GetFullPath($ServerScript)
+    return ($actualNode -ieq $expectedNode -and [string]$info.CommandLine -like "*$serverNeedle*")
+  } catch {
+    try { return ([IO.Path]::GetFullPath($process.Path) -ieq [IO.Path]::GetFullPath($NodeExe)) }
+    catch { return $false }
+  }
+}
+
+if (Test-Path $PidFile) {
+  try { $record = Get-Content $PidFile -Raw | ConvertFrom-Json }
+  catch { throw "Invalid scoreboard PID file: $PidFile. Verify no scoreboard process is running before deleting it." }
+
+  $managedPid = [int]$record.pid
+  if (Get-Process -Id $managedPid -ErrorAction SilentlyContinue) {
+    if (-not (Test-ScoreboardProcess $managedPid)) {
+      throw "Refusing to start: $PidFile points to live PID $managedPid that is not this packaged scoreboard."
+    }
+    Write-Host "Robot Scoreboard is already running as PID $managedPid."
+    if (-not $NoBrowser) { Start-Process "http://localhost:$($record.port)/control" }
+    exit 0
+  }
+
+  Remove-Item $PidFile -Force
+}
+
+$env:HOST = $ListenHost
+$env:PORT = [string]$Port
+$process = Start-Process -FilePath $NodeExe -ArgumentList @($ServerScript) -WorkingDirectory $Root -PassThru
+$record = [ordered]@{
+  pid = $process.Id
+  port = $Port
+  node = [IO.Path]::GetFullPath($NodeExe)
+  server = [IO.Path]::GetFullPath($ServerScript)
+  startedAt = (Get-Date).ToString("o")
+}
+$record | ConvertTo-Json | Set-Content -Path $PidFile -Encoding UTF8
+
+$healthUrl = "http://127.0.0.1:$Port/healthz"
+$ready = $false
+try {
+  for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    if ($process.HasExited) { throw "Scoreboard process exited with code $($process.ExitCode) before becoming ready." }
+    try {
+      $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
+      if ($response.StatusCode -eq 200) { $ready = $true; break }
+    } catch {}
+    Start-Sleep -Milliseconds 250
+  }
+  if (-not $ready) { throw "Scoreboard did not become ready at $healthUrl." }
+} catch {
+  Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+  Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+  throw
+}
+
+Write-Host "Robot Scoreboard started as PID $($process.Id) on port $Port."
+if (-not $NoBrowser) { Start-Process "http://localhost:$Port/control" }
+'@ | Set-Content -Path (Join-Path $Stage "START-SCOREBOARD.ps1") -Encoding UTF8
+
+@'
+$ErrorActionPreference = "Stop"
+$Root = $PSScriptRoot
+$PidFile = Join-Path $Root "runtime\scoreboard.pid.json"
+$NodeExe = Join-Path $Root "bin\node.exe"
+$ServerScript = Join-Path $Root "server\main.js"
+
+if (-not (Test-Path $PidFile)) {
+  Write-Host "No managed Robot Scoreboard process is recorded. Nothing was stopped."
+  exit 0
+}
+
+try { $record = Get-Content $PidFile -Raw | ConvertFrom-Json }
+catch { throw "Invalid scoreboard PID file: $PidFile. Refusing to stop an unverified process." }
+
+$managedPid = [int]$record.pid
+$process = Get-Process -Id $managedPid -ErrorAction SilentlyContinue
+if (-not $process) {
+  Remove-Item $PidFile -Force
+  Write-Host "Removed stale scoreboard PID record for PID $managedPid."
+  exit 0
+}
+
+$matches = $false
+try {
+  $info = Get-CimInstance Win32_Process -Filter "ProcessId = $managedPid" -ErrorAction Stop
+  $expectedNode = [IO.Path]::GetFullPath($NodeExe)
+  $actualNode = if ($info.ExecutablePath) { [IO.Path]::GetFullPath([string]$info.ExecutablePath) } else { "" }
+  $serverNeedle = [IO.Path]::GetFullPath($ServerScript)
+  $matches = ($actualNode -ieq $expectedNode -and [string]$info.CommandLine -like "*$serverNeedle*")
+} catch {
+  try { $matches = ([IO.Path]::GetFullPath($process.Path) -ieq [IO.Path]::GetFullPath($NodeExe)) }
+  catch { $matches = $false }
+}
+
+if (-not $matches) {
+  throw "Refusing to stop PID $managedPid because it is not the packaged Robot Scoreboard process."
+}
+
+Stop-Process -Id $managedPid -Force
+Wait-Process -Id $managedPid -Timeout 5 -ErrorAction SilentlyContinue
+Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+Write-Host "Robot Scoreboard PID $managedPid stopped."
+'@ | Set-Content -Path (Join-Path $Stage "STOP-SCOREBOARD.ps1") -Encoding UTF8
+
+@'
 @echo off
 setlocal
-cd /d "%~dp0"
-set HOST=0.0.0.0
-set PORT=3000
-start "Robot Scoreboard" "%~dp0bin\node.exe" "%~dp0server\main.js"
-timeout /t 2 /nobreak >nul
-start "" "http://localhost:3000/control"
-endlocal
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0START-SCOREBOARD.ps1"
+exit /b %ERRORLEVEL%
 '@ | Set-Content -Path (Join-Path $Stage "START-SCOREBOARD.cmd") -Encoding ASCII
 
 @'
 @echo off
 setlocal
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000" ^| findstr "LISTENING"') do taskkill /PID %%a /F >nul 2>&1
-endlocal
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0STOP-SCOREBOARD.ps1"
+exit /b %ERRORLEVEL%
 '@ | Set-Content -Path (Join-Path $Stage "STOP-SCOREBOARD.cmd") -Encoding ASCII
 
 @'
@@ -123,9 +245,10 @@ OPERATIONS
 11. FIELD-CHECK.cmd = ตรวจ central-machine readiness
 12. BACKUP-SCOREBOARD.cmd = สำรอง runtime/data + runtime/obs + runtime/config
 13. RESTORE-SCOREBOARD.cmd = กู้ backup (ต้อง STOP server ก่อน)
-14. ไม่ต้องติดตั้ง Node.js และไม่ต้อง npm install ที่เครื่องสนาม
-15. เก็บ runtime/ และ backups/ ไว้เมื่ออัปเดตเวอร์ชัน
-16. ห้าม port-forward TCP 3000 ออก Internet
+14. STOP-SCOREBOARD.cmd หยุดเฉพาะ process ที่ START-SCOREBOARD.cmd บันทึกและยืนยันว่าเป็น Scoreboard เท่านั้น
+15. ไม่ต้องติดตั้ง Node.js และไม่ต้อง npm install ที่เครื่องสนาม
+16. เก็บ runtime/ และ backups/ ไว้เมื่ออัปเดตเวอร์ชัน
+17. ห้าม port-forward TCP 3000 ออก Internet
 '@ | Set-Content -Path (Join-Path $Stage "README-OFFLINE.txt") -Encoding UTF8
 
 Compress-Archive -Path (Join-Path $Stage "*") -DestinationPath $Zip -CompressionLevel Optimal

@@ -161,6 +161,8 @@ npm audit --audit-level=high
 - `npm test` → automated tests ใน `tests/`
 - `npm run stress:obs` → 1,500-update OBS filesystem stress
 
+Dependency automation จำกัดเฉพาะ **direct npm dependencies ที่ประกาศใน `package.json`** เท่านั้น. การเปลี่ยน `package-lock.json` อนุญาตเมื่อเป็นผลที่จำเป็นจากการอัปเดต direct dependency ที่ได้รับอนุมัติ; ไม่ใช้เป็นช่องทางอัปเดต transitive dependency แยกเอง. GitHub Actions versions เป็น manual maintenance และต้องผ่าน CI ปกติ. ดู `docs/DEPENDENCY-AUTOMATION.md`.
+
 ## Tools
 
 ```text
@@ -175,7 +177,7 @@ tools/
    └─ verify-offline-package.ps1
 ```
 
-Backup/restore ทำงานกับ `runtime/data`, `runtime/obs`, `runtime/config`.
+Backup/restore ทำงานกับ `runtime/data`, `runtime/obs`, `runtime/config`. Restore จะปฏิเสธการทำงานเมื่อพบ managed scoreboard process หรือพบ listener บน port ที่กำหนด (รองรับ `PORT`/`-Port` ไม่ได้ hard-code เฉพาะ 3000).
 
 ## Offline Windows package
 
@@ -187,6 +189,10 @@ npm run build:offline:windows
 ```
 
 Package ที่ได้มี `server/`, `dist/client/`, production dependencies, `runtime/config/`, field tools และ `bin/node.exe`; เครื่องสนามไม่ต้อง `npm install`.
+
+`START-SCOREBOARD.cmd` บันทึก managed PID record ใน `runtime/scoreboard.pid.json`. `STOP-SCOREBOARD.cmd` จะหยุดเฉพาะ process ที่ record นี้ชี้ถึงและตรวจว่าเป็น packaged Scoreboard ก่อน จึงไม่ฆ่าโปรแกรมอื่นเพียงเพราะใช้ TCP 3000.
+
+Release workflow ใช้ validation gate ระดับเดียวกับ field CI ที่สำคัญ: build/check/tests, OBS stress, live field check, backup/restore drill, audit, package build และ staged-package runtime verification. ถ้าสร้างจาก tag ชื่อ tag ต้องตรงกับ `package.json` version (`v<version>`) เพื่อไม่ให้ artifact มี version metadata ขัดกัน.
 
 ## Field acceptance
 
