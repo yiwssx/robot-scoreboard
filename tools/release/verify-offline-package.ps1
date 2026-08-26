@@ -15,6 +15,8 @@ $required = @(
   "BACKUP-SCOREBOARD.cmd",
   "RESTORE-SCOREBOARD.cmd",
   "README-OFFLINE.txt",
+  "LICENSE",
+  "NOTICE",
   "server\main.js",
   "dist\client\pages\control.html",
   "dist\client\pages\team-a.html",

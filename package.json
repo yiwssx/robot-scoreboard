@@ -13,9 +13,17 @@
     "stress:obs": "node tests/stress/obs-stress.js",
     "build:offline:windows": "powershell -ExecutionPolicy Bypass -File tools/release/build-offline-windows.ps1"
   },
-  "keywords": ["scoreboard", "robot", "socket.io", "obs", "offline", "preact", "typescript"],
+  "keywords": [
+    "scoreboard",
+    "robot",
+    "socket.io",
+    "obs",
+    "offline",
+    "preact",
+    "typescript"
+  ],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-or-later",
   "type": "commonjs",
   "engines": {
     "node": ">=20.19"
