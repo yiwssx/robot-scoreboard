@@ -25,7 +25,7 @@ New-Item -ItemType Directory -Force -Path `
   (Join-Path $Stage "backups"),
   (Join-Path $Stage "tools\field") | Out-Null
 
-foreach ($item in @("server", "package.json", "package-lock.json", "README.md", "node_modules")) {
+foreach ($item in @("server", "package.json", "package-lock.json", "README.md", "LICENSE", "NOTICE", "node_modules")) {
   Copy-Item (Join-Path $Root $item) -Destination $Stage -Recurse -Force
 }
 Copy-Item (Join-Path $Root "dist\client") -Destination (Join-Path $Stage "dist\client") -Recurse -Force
@@ -249,6 +249,8 @@ OPERATIONS
 15. ไม่ต้องติดตั้ง Node.js และไม่ต้อง npm install ที่เครื่องสนาม
 16. เก็บ runtime/ และ backups/ ไว้เมื่ออัปเดตเวอร์ชัน
 17. ห้าม port-forward TCP 3000 ออก Internet
+18. License: GPL-3.0-or-later — อ่าน LICENSE และ NOTICE ที่มากับแพ็กเกจ
+19. Source / project history: https://github.com/yiwssx/robot-scoreboard
 '@ | Set-Content -Path (Join-Path $Stage "README-OFFLINE.txt") -Encoding UTF8
 
 Compress-Archive -Path (Join-Path $Stage "*") -DestinationPath $Zip -CompressionLevel Optimal

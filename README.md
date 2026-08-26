@@ -199,3 +199,18 @@ Release workflow ใช้ validation gate ระดับเดียวกั�
 CI ไม่ทดแทน physical field acceptance. ก่อนประกาศ **Field Approved** ต้องทดสอบเครื่องกลาง + OBS + Team A/B + LAN + audio + power recovery จริงตาม `docs/FIELD-ACCEPTANCE-CHECKLIST.md`.
 
 รายละเอียด Client/Broadcast ดู `docs/CLIENT-BROADCAST-ARCHITECTURE.md`.
+
+## Project purpose, origin and license
+
+Robot Scoreboard เวอร์ชันนี้พัฒนาต่อยอดโดยมี **การศึกษา การเรียนรู้ และการแข่งขันของนักเรียน/นักศึกษา** เป็นวัตถุประสงค์หลัก โดยเฉพาะงานแข่งขันหุ่นยนต์และกิจกรรมที่เกี่ยวข้อง อย่างไรก็ตาม สามารถนำไปศึกษา ดัดแปลง แจกจ่าย และประยุกต์ใช้กับงานประเภทอื่น รวมถึงการใช้งานเชิงพาณิชย์ได้ ภายใต้เงื่อนไขของ GNU GPL
+
+- **Original project author:** Buncha Sawaddee
+- **Original project:** https://github.com/foAddz19/robot-scoreboard
+- **Re-engineered and maintained by:** Supharoek Sudadet
+- **Re-engineered repository:** https://github.com/yiwssx/robot-scoreboard
+
+โปรเจกต์ต้นทางมี metadata ใน `package.json` ระบุ License เป็น ISC. เวอร์ชัน re-engineered นี้เผยแพร่ภายใต้ **GNU General Public License v3.0 or later (GPL-3.0-or-later)** โดยยังคงระบุที่มาและข้อมูล License ของต้นฉบับไว้ใน `NOTICE`.
+
+การใช้งานเชิงพาณิชย์ **ไม่ได้ถูกห้าม** ภายใต้ GPL แต่ไม่ใช่วัตถุประสงค์หลักของโครงการนี้ ผู้ที่แจกจ่ายซอฟต์แวร์หรือเวอร์ชันดัดแปลงต้องปฏิบัติตามข้อกำหนดของ GPL ที่เกี่ยวข้อง
+
+ดูข้อความ License ฉบับเต็มที่ [LICENSE](LICENSE) และรายละเอียดที่มาที่ [NOTICE](NOTICE).
