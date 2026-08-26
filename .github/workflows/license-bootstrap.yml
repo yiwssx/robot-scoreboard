@@ -1,0 +1,112 @@
+name: License Bootstrap
+
+on:
+  push:
+    branches:
+      - agent/add-gpl-license
+
+permissions:
+  contents: write
+
+jobs:
+  apply-license:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/add-gpl-license
+
+      - name: Apply canonical GPL license and project notices
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl -fsSL https://www.gnu.org/licenses/gpl-3.0.txt -o LICENSE
+          grep -q 'GNU GENERAL PUBLIC LICENSE' LICENSE
+          grep -q 'END OF TERMS AND CONDITIONS' LICENSE
+          test "$(wc -c < LICENSE)" -gt 30000
+
+          cat > NOTICE <<'EOF'
+          Robot Scoreboard
+
+          Project provenance
+          ------------------
+
+          Original project author: Buncha Sawaddee
+          Original project: https://github.com/foAddz19/robot-scoreboard
+          Original repository metadata identified the project license as ISC.
+
+          Re-engineered edition:
+          Re-engineered and maintained by: Supharoek Sudadet
+          Repository: https://github.com/yiwssx/robot-scoreboard
+
+          This repository is a re-engineered derivative of the original Robot Scoreboard.
+          The current re-engineered project is distributed under the GNU General Public
+          License version 3 or (at your option) any later version (GPL-3.0-or-later).
+
+          This notice preserves the provenance and the ISC licensing metadata declared by
+          the original repository. It does not remove or replace notices that may apply to
+          original material or third-party dependencies.
+          EOF
+
+          node <<'NODE'
+          const fs = require('fs');
+
+          const pkgPath = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+          pkg.license = 'GPL-3.0-or-later';
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+
+          const lockPath = 'package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+          if (!lock.packages || !lock.packages['']) {
+            throw new Error('package-lock.json has no root package metadata');
+          }
+          lock.packages[''].license = 'GPL-3.0-or-later';
+          fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+
+          const readmePath = 'README.md';
+          let readme = fs.readFileSync(readmePath, 'utf8').trimEnd();
+          const marker = '## Project purpose, origin and license';
+          if (!readme.includes(marker)) {
+            readme += `\n\n${marker}\n\nRobot Scoreboard เวอร์ชันนี้พัฒนาต่อยอดโดยมี **การศึกษา การเรียนรู้ และการแข่งขันของนักเรียน/นักศึกษา** เป็นวัตถุประสงค์หลัก โดยเฉพาะงานแข่งขันหุ่นยนต์และกิจกรรมที่เกี่ยวข้อง อย่างไรก็ตาม สามารถนำไปศึกษา ดัดแปลง แจกจ่าย และประยุกต์ใช้กับงานประเภทอื่น รวมถึงการใช้งานเชิงพาณิชย์ได้ ภายใต้เงื่อนไขของ GNU GPL\n\n- **Original project author:** Buncha Sawaddee\n- **Original project:** https://github.com/foAddz19/robot-scoreboard\n- **Re-engineered and maintained by:** Supharoek Sudadet\n- **Re-engineered repository:** https://github.com/yiwssx/robot-scoreboard\n\nโปรเจกต์ต้นทางมี metadata ใน \\`package.json\\` ระบุ License เป็น ISC. เวอร์ชัน re-engineered นี้เผยแพร่ภายใต้ **GNU General Public License v3.0 or later (GPL-3.0-or-later)** โดยยังคงระบุที่มาและข้อมูล License ของต้นฉบับไว้ใน \\`NOTICE\\`.\n\nการใช้งานเชิงพาณิชย์ **ไม่ได้ถูกห้าม** ภายใต้ GPL แต่ไม่ใช่วัตถุประสงค์หลักของโครงการนี้ ผู้ที่แจกจ่ายซอฟต์แวร์หรือเวอร์ชันดัดแปลงต้องปฏิบัติตามข้อกำหนดของ GPL ที่เกี่ยวข้อง\n\nดูข้อความ License ฉบับเต็มที่ [LICENSE](LICENSE) และรายละเอียดที่มาที่ [NOTICE](NOTICE).`;
+          }
+          fs.writeFileSync(readmePath, readme + '\n');
+
+          const buildPath = 'tools/release/build-offline-windows.ps1';
+          let build = fs.readFileSync(buildPath, 'utf8');
+          const oldCopy = 'foreach ($item in @("server", "package.json", "package-lock.json", "README.md", "node_modules")) {';
+          const newCopy = 'foreach ($item in @("server", "package.json", "package-lock.json", "README.md", "LICENSE", "NOTICE", "node_modules")) {';
+          if (!build.includes(newCopy)) {
+            if (!build.includes(oldCopy)) throw new Error('Offline package copy list changed unexpectedly');
+            build = build.replace(oldCopy, newCopy);
+          }
+          const oldOffline = '17. ห้าม port-forward TCP 3000 ออก Internet';
+          const newOffline = '17. ห้าม port-forward TCP 3000 ออก Internet\\n18. License: GPL-3.0-or-later — อ่าน LICENSE และ NOTICE ที่มากับแพ็กเกจ\\n19. Source / project history: https://github.com/yiwssx/robot-scoreboard';
+          if (!build.includes('18. License: GPL-3.0-or-later')) {
+            if (!build.includes(oldOffline)) throw new Error('Offline README template changed unexpectedly');
+            build = build.replace(oldOffline, newOffline);
+          }
+          fs.writeFileSync(buildPath, build);
+
+          const verifyPath = 'tools/release/verify-offline-package.ps1';
+          let verify = fs.readFileSync(verifyPath, 'utf8');
+          const requiredAnchor = '  "README-OFFLINE.txt",';
+          if (!verify.includes('  "LICENSE",')) {
+            if (!verify.includes(requiredAnchor)) throw new Error('Offline verifier required list changed unexpectedly');
+            verify = verify.replace(requiredAnchor, `${requiredAnchor}\n  "LICENSE",\n  "NOTICE",`);
+          }
+          fs.writeFileSync(verifyPath, verify);
+          NODE
+
+      - name: Commit generated licensing changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/license-bootstrap.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add LICENSE NOTICE README.md package.json package-lock.json tools/release/build-offline-windows.ps1 tools/release/verify-offline-package.ps1 .github/workflows/license-bootstrap.yml
+          git commit -m 'License re-engineered project under GPL-3.0-or-later'
+          git push origin HEAD:agent/add-gpl-license
