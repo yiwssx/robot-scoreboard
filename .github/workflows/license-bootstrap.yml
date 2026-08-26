@@ -70,7 +70,25 @@ jobs:
           let readme = fs.readFileSync(readmePath, 'utf8').trimEnd();
           const marker = '## Project purpose, origin and license';
           if (!readme.includes(marker)) {
-            readme += `\n\n${marker}\n\nRobot Scoreboard เวอร์ชันนี้พัฒนาต่อยอดโดยมี **การศึกษา การเรียนรู้ และการแข่งขันของนักเรียน/นักศึกษา** เป็นวัตถุประสงค์หลัก โดยเฉพาะงานแข่งขันหุ่นยนต์และกิจกรรมที่เกี่ยวข้อง อย่างไรก็ตาม สามารถนำไปศึกษา ดัดแปลง แจกจ่าย และประยุกต์ใช้กับงานประเภทอื่น รวมถึงการใช้งานเชิงพาณิชย์ได้ ภายใต้เงื่อนไขของ GNU GPL\n\n- **Original project author:** Buncha Sawaddee\n- **Original project:** https://github.com/foAddz19/robot-scoreboard\n- **Re-engineered and maintained by:** Supharoek Sudadet\n- **Re-engineered repository:** https://github.com/yiwssx/robot-scoreboard\n\nโปรเจกต์ต้นทางมี metadata ใน \\`package.json\\` ระบุ License เป็น ISC. เวอร์ชัน re-engineered นี้เผยแพร่ภายใต้ **GNU General Public License v3.0 or later (GPL-3.0-or-later)** โดยยังคงระบุที่มาและข้อมูล License ของต้นฉบับไว้ใน \\`NOTICE\\`.\n\nการใช้งานเชิงพาณิชย์ **ไม่ได้ถูกห้าม** ภายใต้ GPL แต่ไม่ใช่วัตถุประสงค์หลักของโครงการนี้ ผู้ที่แจกจ่ายซอฟต์แวร์หรือเวอร์ชันดัดแปลงต้องปฏิบัติตามข้อกำหนดของ GPL ที่เกี่ยวข้อง\n\nดูข้อความ License ฉบับเต็มที่ [LICENSE](LICENSE) และรายละเอียดที่มาที่ [NOTICE](NOTICE).`;
+            const section = [
+              '',
+              '',
+              marker,
+              '',
+              'Robot Scoreboard เวอร์ชันนี้พัฒนาต่อยอดโดยมี **การศึกษา การเรียนรู้ และการแข่งขันของนักเรียน/นักศึกษา** เป็นวัตถุประสงค์หลัก โดยเฉพาะงานแข่งขันหุ่นยนต์และกิจกรรมที่เกี่ยวข้อง อย่างไรก็ตาม สามารถนำไปศึกษา ดัดแปลง แจกจ่าย และประยุกต์ใช้กับงานประเภทอื่น รวมถึงการใช้งานเชิงพาณิชย์ได้ ภายใต้เงื่อนไขของ GNU GPL',
+              '',
+              '- **Original project author:** Buncha Sawaddee',
+              '- **Original project:** https://github.com/foAddz19/robot-scoreboard',
+              '- **Re-engineered and maintained by:** Supharoek Sudadet',
+              '- **Re-engineered repository:** https://github.com/yiwssx/robot-scoreboard',
+              '',
+              'โปรเจกต์ต้นทางมี metadata ใน `package.json` ระบุ License เป็น ISC. เวอร์ชัน re-engineered นี้เผยแพร่ภายใต้ **GNU General Public License v3.0 or later (GPL-3.0-or-later)** โดยยังคงระบุที่มาและข้อมูล License ของต้นฉบับไว้ใน `NOTICE`.',
+              '',
+              'การใช้งานเชิงพาณิชย์ **ไม่ได้ถูกห้าม** ภายใต้ GPL แต่ไม่ใช่วัตถุประสงค์หลักของโครงการนี้ ผู้ที่แจกจ่ายซอฟต์แวร์หรือเวอร์ชันดัดแปลงต้องปฏิบัติตามข้อกำหนดของ GPL ที่เกี่ยวข้อง',
+              '',
+              'ดูข้อความ License ฉบับเต็มที่ [LICENSE](LICENSE) และรายละเอียดที่มาที่ [NOTICE](NOTICE).'
+            ].join('\n');
+            readme += section;
           }
           fs.writeFileSync(readmePath, readme + '\n');
 
@@ -83,7 +101,7 @@ jobs:
             build = build.replace(oldCopy, newCopy);
           }
           const oldOffline = '17. ห้าม port-forward TCP 3000 ออก Internet';
-          const newOffline = '17. ห้าม port-forward TCP 3000 ออก Internet\\n18. License: GPL-3.0-or-later — อ่าน LICENSE และ NOTICE ที่มากับแพ็กเกจ\\n19. Source / project history: https://github.com/yiwssx/robot-scoreboard';
+          const newOffline = '17. ห้าม port-forward TCP 3000 ออก Internet\n18. License: GPL-3.0-or-later — อ่าน LICENSE และ NOTICE ที่มากับแพ็กเกจ\n19. Source / project history: https://github.com/yiwssx/robot-scoreboard';
           if (!build.includes('18. License: GPL-3.0-or-later')) {
             if (!build.includes(oldOffline)) throw new Error('Offline README template changed unexpectedly');
             build = build.replace(oldOffline, newOffline);
@@ -95,7 +113,7 @@ jobs:
           const requiredAnchor = '  "README-OFFLINE.txt",';
           if (!verify.includes('  "LICENSE",')) {
             if (!verify.includes(requiredAnchor)) throw new Error('Offline verifier required list changed unexpectedly');
-            verify = verify.replace(requiredAnchor, `${requiredAnchor}\n  "LICENSE",\n  "NOTICE",`);
+            verify = verify.replace(requiredAnchor, requiredAnchor + '\n  "LICENSE",\n  "NOTICE",');
           }
           fs.writeFileSync(verifyPath, verify);
           NODE
