@@ -31,6 +31,9 @@ jobs:
             -f name='dependency-direct' -f color='0E8A16' \
             -f description='Direct npm dependency declared in package.json' >/dev/null 2>&1 || true
           gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
+            -f name='dependency-security' -f color='B60205' \
+            -f description='Lockfile-only transitive security update eligible after CI' >/dev/null 2>&1 || true
+          gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
             -f name='dependency-indirect-blocked' -f color='B60205' \
             -f description='Indirect/transitive npm dependency update blocked by project policy' >/dev/null 2>&1 || true
           gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
@@ -38,7 +41,7 @@ jobs:
             -f description='Dependency update is outside the package.json-only automation policy' >/dev/null 2>&1 || true
           gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
             -f name='automerge-safe' -f color='0E8A16' \
-            -f description='Direct package.json patch/minor update eligible for automatic merge after CI' >/dev/null 2>&1 || true
+            -f description='Patch/minor dependency update eligible for automatic merge after CI' >/dev/null 2>&1 || true
           gh api --method POST "repos/$GITHUB_REPOSITORY/labels" \
             -f name='dependency-major' -f color='B60205' \
             -f description='Major dependency update requiring manual review' >/dev/null 2>&1 || true
@@ -46,7 +49,7 @@ jobs:
             -f name='dependency-hold' -f color='FBCA04' \
             -f description='Temporarily block automatic dependency merge, for example during field freeze' >/dev/null 2>&1 || true
 
-      - name: Enforce package.json-only dependency policy
+      - name: Enforce dependency policy
         id: policy
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -61,41 +64,68 @@ jobs:
 
           if [ "$PACKAGE_ECOSYSTEM" != "npm" ]; then
             gh pr edit "$PR_URL" --remove-label "dependency-direct" >/dev/null 2>&1 || true
+            gh pr edit "$PR_URL" --remove-label "dependency-security" >/dev/null 2>&1 || true
             gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
             gh pr edit "$PR_URL" --add-label "dependency-policy-blocked"
             gh pr edit "$PR_URL" --add-label "dependency-hold"
-            gh pr close "$PR_URL" --comment "Closed automatically: dependency automation for this project is limited to direct npm dependencies declared in package.json."
+            gh pr close "$PR_URL" --comment "Closed automatically: dependency automation for this project is limited to npm dependencies."
             exit 0
           fi
 
+          CHANGED_FILES="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename')"
+
           case "$DEPENDENCY_TYPE" in
-            direct:production|direct:development) ;;
+            direct:production|direct:development)
+              if ! grep -Fxq 'package.json' <<<"$CHANGED_FILES"; then
+                gh pr edit "$PR_URL" --remove-label "dependency-direct" >/dev/null 2>&1 || true
+                gh pr edit "$PR_URL" --remove-label "dependency-security" >/dev/null 2>&1 || true
+                gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
+                gh pr edit "$PR_URL" --add-label "dependency-policy-blocked"
+                gh pr edit "$PR_URL" --add-label "dependency-hold"
+                gh pr close "$PR_URL" --comment "Closed automatically: a routine direct dependency PR must update its declaration in package.json."
+                exit 0
+              fi
+
+              gh pr edit "$PR_URL" --add-label "dependency-direct"
+              gh pr edit "$PR_URL" --remove-label "dependency-security" >/dev/null 2>&1 || true
+              gh pr edit "$PR_URL" --remove-label "dependency-indirect-blocked" >/dev/null 2>&1 || true
+              gh pr edit "$PR_URL" --remove-label "dependency-policy-blocked" >/dev/null 2>&1 || true
+              echo "eligible=true" >> "$GITHUB_OUTPUT"
+              ;;
+
+            indirect)
+              # Routine indirect updates are excluded by dependabot.yml. A verified
+              # Dependabot indirect PR is therefore treated as a security exception,
+              # but only when it is strictly lockfile-only.
+              if [ "$CHANGED_FILES" != "package-lock.json" ]; then
+                gh pr edit "$PR_URL" --remove-label "dependency-direct" >/dev/null 2>&1 || true
+                gh pr edit "$PR_URL" --remove-label "dependency-security" >/dev/null 2>&1 || true
+                gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
+                gh pr edit "$PR_URL" --add-label "dependency-indirect-blocked"
+                gh pr edit "$PR_URL" --add-label "dependency-hold"
+                gh pr close "$PR_URL" --comment "Closed automatically: indirect dependency updates are allowed only as verified lockfile-only security fixes."
+                exit 0
+              fi
+
+              gh pr edit "$PR_URL" --add-label "dependency-security"
+              gh pr edit "$PR_URL" --remove-label "dependency-direct" >/dev/null 2>&1 || true
+              gh pr edit "$PR_URL" --remove-label "dependency-indirect-blocked" >/dev/null 2>&1 || true
+              gh pr edit "$PR_URL" --remove-label "dependency-policy-blocked" >/dev/null 2>&1 || true
+              echo "eligible=true" >> "$GITHUB_OUTPUT"
+              ;;
+
             *)
               gh pr edit "$PR_URL" --remove-label "dependency-direct" >/dev/null 2>&1 || true
+              gh pr edit "$PR_URL" --remove-label "dependency-security" >/dev/null 2>&1 || true
               gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
               gh pr edit "$PR_URL" --add-label "dependency-indirect-blocked"
               gh pr edit "$PR_URL" --add-label "dependency-hold"
-              gh pr close "$PR_URL" --comment "Closed automatically: indirect/transitive npm dependencies must not be maintained independently. They may move only when required by an approved direct package.json dependency update."
+              gh pr close "$PR_URL" --comment "Closed automatically: dependency metadata is outside the supported direct-or-security policy."
               exit 0
               ;;
           esac
 
-          CHANGED_FILES="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename')"
-          if ! grep -Fxq 'package.json' <<<"$CHANGED_FILES"; then
-            gh pr edit "$PR_URL" --remove-label "dependency-direct" >/dev/null 2>&1 || true
-            gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
-            gh pr edit "$PR_URL" --add-label "dependency-policy-blocked"
-            gh pr edit "$PR_URL" --add-label "dependency-hold"
-            gh pr close "$PR_URL" --comment "Closed automatically: an automated dependency PR must update a direct dependency declaration in package.json; lockfile-only dependency updates are not accepted."
-            exit 0
-          fi
-
-          gh pr edit "$PR_URL" --add-label "dependency-direct"
-          gh pr edit "$PR_URL" --remove-label "dependency-indirect-blocked" >/dev/null 2>&1 || true
-          gh pr edit "$PR_URL" --remove-label "dependency-policy-blocked" >/dev/null 2>&1 || true
-          echo "eligible=true" >> "$GITHUB_OUTPUT"
-
-      - name: Classify eligible direct update for automatic merge
+      - name: Classify eligible update for automatic merge
         if: steps.policy.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -106,6 +136,7 @@ jobs:
             version-update:semver-patch|version-update:semver-minor)
               gh pr edit "$PR_URL" --add-label "automerge-safe"
               gh pr edit "$PR_URL" --remove-label "dependency-major" >/dev/null 2>&1 || true
+              gh pr edit "$PR_URL" --remove-label "dependency-hold" >/dev/null 2>&1 || true
               ;;
             *)
               gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
