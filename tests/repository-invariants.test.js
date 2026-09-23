@@ -8,7 +8,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("dependency automation is limited to direct package.json npm dependencies", () => {
+test("dependency automation keeps routine updates direct while allowing a narrow security exception", () => {
   const dependabot = read(".github/dependabot.yml");
   assert.match(dependabot, /package-ecosystem:\s*"npm"/);
   assert.match(dependabot, /dependency-type:\s*"direct"/);
@@ -19,13 +19,24 @@ test("dependency automation is limited to direct package.json npm dependencies",
   assert.match(policy, /PACKAGE_ECOSYSTEM/);
   assert.match(policy, /PACKAGE_ECOSYSTEM" != "npm"/);
   assert.match(policy, /grep -Fxq 'package\.json'/);
+  assert.match(policy, /DEPENDENCY_TYPE/);
+  assert.match(policy, /indirect\)/);
+  assert.match(policy, /CHANGED_FILES" != "package-lock\.json"/);
+  assert.match(policy, /dependency-security/);
   assert.match(policy, /dependency-indirect-blocked/);
   assert.match(policy, /dependency-policy-blocked/);
+  assert.doesNotMatch(
+    policy,
+    /--remove-label "dependency-hold"/,
+    "classification must never clear a manual field-freeze hold",
+  );
 
   const automerge = read(".github/workflows/dependabot-automerge.yml");
   assert.match(automerge, /dependency-direct/);
+  assert.match(automerge, /dependency-security/);
   assert.match(automerge, /dependency-policy-blocked/);
   assert.match(automerge, /dependency-indirect-blocked/);
+  assert.match(automerge, /dependency-hold/);
 });
 
 test("offline release workflow cannot bypass critical field validation gates", () => {
