@@ -136,7 +136,6 @@ jobs:
             version-update:semver-patch|version-update:semver-minor)
               gh pr edit "$PR_URL" --add-label "automerge-safe"
               gh pr edit "$PR_URL" --remove-label "dependency-major" >/dev/null 2>&1 || true
-              gh pr edit "$PR_URL" --remove-label "dependency-hold" >/dev/null 2>&1 || true
               ;;
             *)
               gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
