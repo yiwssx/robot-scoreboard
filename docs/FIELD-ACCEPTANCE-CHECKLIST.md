@@ -1,98 +1,98 @@
 # Field Acceptance Checklist
 
-ใช้ checklist นี้กับ **เครื่อง Windows, OBS, Router/Switch และอุปกรณ์ Team A/B ที่จะใช้จริง** ก่อน freeze release สำหรับการแข่งขัน
+Use this checklist with the **actual Windows machine, OBS setup, router/switch, and Team A/B devices that will be used in competition** before freezing the release.
 
 ## 1. Machine readiness
 
-- [ ] แตก Offline ZIP ลงโฟลเดอร์ถาวร ไม่รันจาก ZIP
-- [ ] `START-SCOREBOARD.cmd` เปิด server และ `/control` ได้
-- [ ] `/status` แสดง `READY FOR FIELD CHECK`
-- [ ] `FIELD-CHECK.cmd` จบด้วย exit code 0
-- [ ] มี IPv4 ของ LAN สนามแสดงใน `/status`
-- [ ] พื้นที่ว่างดิสก์เพียงพอ
-- [ ] ปิด/เปิด server ใหม่แล้ว state โหลดกลับถูกต้อง
+- [ ] Extract the Offline ZIP to a permanent folder; do not run directly from the ZIP archive
+- [ ] `START-SCOREBOARD.cmd` starts the server and `/control` is accessible
+- [ ] `/status` shows `READY FOR FIELD CHECK`
+- [ ] `FIELD-CHECK.cmd` completes with exit code 0
+- [ ] The field LAN IPv4 address is shown in `/status`
+- [ ] Sufficient disk space is available
+- [ ] After restarting the server, persisted state reloads correctly
 
 ## 2. OBS acceptance
 
-- [ ] OBS Text Sources ชี้ไป `runtime/obs/*` ของ release นี้
-- [ ] score A/B เปลี่ยนตามระบบ
-- [ ] time/status เปลี่ยนตามระบบ
-- [ ] SHOT A/B เปลี่ยนตามระบบ
-- [ ] mission shot 1–4 ของ A/B เปลี่ยนครบ
-- [ ] team name / school แสดงถูกต้อง
-- [ ] เปิด OBS หลัง server แล้วค่าปัจจุบันยังอ่านได้
-- [ ] ปิด/เปิด OBS ระหว่าง server ทำงานแล้วระบบไม่ error
+- [ ] OBS Text Sources point to `runtime/obs/*` from this release
+- [ ] Team A/B scores update correctly
+- [ ] Time/status updates correctly
+- [ ] SHOT A/B updates correctly
+- [ ] Mission shots 1–4 for Team A/B all update correctly
+- [ ] Team name / school displays correctly
+- [ ] If OBS starts after the server, current values are still read correctly
+- [ ] Closing and reopening OBS while the server is running does not cause system errors
 
 ## 3. LAN acceptance
 
-ทดสอบอย่างน้อย 3 เครื่อง: Server/Control, Team A, Team B
+Test with at least three machines/devices: Server/Control, Team A, and Team B.
 
-- [ ] Team A เข้า `http://SERVER-IP:3000/team/a`
-- [ ] Team B เข้า `http://SERVER-IP:3000/team/b`
-- [ ] Team setup เข้า `http://SERVER-IP:3000/teams`
-- [ ] refresh ทุกหน้าแล้วยัง sync state
-- [ ] ปิด Wi-Fi เครื่อง Team A แล้วเปิดใหม่ สามารถ reconnect ได้
-- [ ] ปิด Wi-Fi เครื่อง Team B แล้วเปิดใหม่ สามารถ reconnect ได้
-- [ ] sleep/wake client แล้ว reconnect ได้
-- [ ] ไม่มี port forwarding TCP 3000 ออก Internet
+- [ ] Team A can open `http://SERVER-IP:3000/team/a`
+- [ ] Team B can open `http://SERVER-IP:3000/team/b`
+- [ ] Team setup can open `http://SERVER-IP:3000/teams`
+- [ ] Refreshing every page preserves synchronized state
+- [ ] After disabling and re-enabling Wi-Fi on Team A, the client reconnects successfully
+- [ ] After disabling and re-enabling Wi-Fi on Team B, the client reconnects successfully
+- [ ] A client reconnects successfully after sleep/wake
+- [ ] TCP 3000 is not port-forwarded to the Internet
 
 ## 4. Match endurance
 
-ทำอย่างน้อย 10–20 คู่ต่อเนื่อง
+Run at least 10–20 consecutive matches.
 
 - [ ] READY → RUNNING
 - [ ] RUNNING → PAUSED → RUNNING
-- [ ] scoring ถูก reject นอก RUNNING
-- [ ] mission เดิมกดซ้ำไม่ได้
-- [ ] ครบเวลา → FINISH
-- [ ] Result Review / Correction ใช้งานได้
-- [ ] Finalize / Lock ใช้งานได้
-- [ ] เตรียมคู่ใหม่ได้หลัง lock เท่านั้น
-- [ ] match history ไม่ duplicate
+- [ ] Scoring is rejected outside RUNNING state
+- [ ] The same mission cannot be submitted twice
+- [ ] Time expiration → FINISH
+- [ ] Result Review / Correction works correctly
+- [ ] Finalize / Lock works correctly
+- [ ] A new match can be prepared only after the previous result is locked
+- [ ] Match history contains no duplicates
 
 ## 5. Failure recovery
 
-- [ ] ปิด browser Control ระหว่าง RUNNING แล้วเปิดใหม่
-- [ ] refresh Team A/B พร้อมกัน
-- [ ] stop server ระหว่าง RUNNING แล้ว start ใหม่ → restore เป็น PAUSED
-- [ ] reboot Windows ระหว่างการแข่งขันจำลอง → restore เป็น PAUSED
-- [ ] score/state ก่อน restart ไม่สูญหายเกิน persistence window ที่ยอมรับได้
-- [ ] OBS เปิดอยู่ขณะ score เปลี่ยนเร็ว ๆ ไม่มี write failure ที่กระทบการแข่งขัน
+- [ ] Close the Control browser during RUNNING and reopen it successfully
+- [ ] Refresh Team A/B simultaneously
+- [ ] Stop the server during RUNNING and start it again → state restores as PAUSED
+- [ ] Reboot Windows during a simulated competition → state restores as PAUSED
+- [ ] Score/state loss after restart does not exceed the accepted persistence window
+- [ ] With OBS running during rapid score changes, no write failure affects competition operation
 
 ## 6. Human-error guards
 
-- [ ] Team A/B ไม่มี START / STOP / RESET
-- [ ] RESET ถูก block ตอน RUNNING/PAUSED
-- [ ] RESET ALL ต้องกดค้าง
-- [ ] TEAM A และ TEAM B เลือกทีมเดียวกันไม่ได้
-- [ ] duplicate rename ถูก reject
-- [ ] Result ที่ lock แล้วแก้ไม่ได้
+- [ ] Team A/B interfaces do not expose START / STOP / RESET
+- [ ] RESET is blocked during RUNNING/PAUSED
+- [ ] RESET ALL requires press-and-hold confirmation
+- [ ] TEAM A and TEAM B cannot select the same team
+- [ ] Duplicate rename is rejected
+- [ ] A locked result cannot be modified
 
 ## 7. Audio
 
-- [ ] browser ที่ใช้จริง unlock audio หลัง interaction
-- [ ] final warning ดังจริง
-- [ ] volume ของ Windows / browser / mixer / PA อยู่ระดับใช้งานสนาม
-- [ ] refresh browser แล้วทดสอบ audio ใหม่
+- [ ] The actual field browser unlocks audio after user interaction
+- [ ] The final warning sound is audible
+- [ ] Windows / browser / mixer / PA volume is appropriate for field operation
+- [ ] After refreshing the browser, audio is tested again
 
 ## 8. Backup / Restore drill
 
-- [ ] `BACKUP-SCOREBOARD.cmd` สร้าง backup ได้
-- [ ] backup มี `manifest.json`, `data/`, `obs/`, `config/` (สำเนาจาก `runtime/`)
-- [ ] stop server ก่อน restore
-- [ ] ทดลอง restore backup ในรอบซ้อม
-- [ ] หลัง restore เปิด `/status` และตรวจ PASS ทั้งหมด
-- [ ] เก็บสำเนา Field Approved ZIP + backup ล่าสุดใน USB สำรอง
+- [ ] `BACKUP-SCOREBOARD.cmd` creates a backup successfully
+- [ ] The backup contains `manifest.json`, `data/`, `obs/`, and `config/` copied from `runtime/`
+- [ ] Stop the server before restore
+- [ ] Perform a restore from backup during rehearsal
+- [ ] After restore, open `/status` and verify that all checks PASS
+- [ ] Keep a copy of the Field Approved ZIP and latest backup on a separate USB drive
 
 ## 9. Freeze / Release gate
 
-สร้าง Field Approved release เมื่อทุกข้อ critical ผ่าน:
+Create a Field Approved release only after all critical checks pass:
 
-- [ ] CI green บน exact commit
-- [ ] Windows Offline ZIP build ผ่าน
-- [ ] 10–20 match endurance ผ่าน
-- [ ] power/restart recovery ผ่าน
-- [ ] OBS/LAN/audio ผ่านบนอุปกรณ์จริง
-- [ ] backup/restore drill ผ่าน
+- [ ] CI is green on the exact commit
+- [ ] Windows Offline ZIP build passes
+- [ ] 10–20 match endurance run passes
+- [ ] Power/restart recovery passes
+- [ ] OBS/LAN/audio passes on the actual field equipment
+- [ ] Backup/restore drill passes
 
-หลัง freeze ห้าม refactor หรือ update dependency ก่อนวันแข่ง เว้นแต่แก้ defect ที่ยืนยันแล้วและต้อง rerun checklist ที่เกี่ยวข้อง
+After the freeze, do not refactor or update dependencies before competition day unless fixing a confirmed defect. Any such change requires rerunning the relevant checklist sections.
