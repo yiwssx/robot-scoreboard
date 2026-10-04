@@ -59,6 +59,27 @@ test("CodeQL security analysis remains enabled for application code", () => {
   assert.match(workflow, /github\.actor != 'dependabot\[bot\]'/);
 });
 
+test("filesystem-backed page routes remain rate-limited", () => {
+  const packageJson = JSON.parse(read("package.json"));
+  assert.equal(packageJson.dependencies["express-rate-limit"], "^8.7.0");
+
+  const routes = read("server/transport/http/routes/pages.routes.js");
+  assert.match(routes, /require\("express-rate-limit"\)/);
+  assert.match(routes, /rateLimit\(/);
+  assert.match(routes, /limit:\s*600/);
+  for (const route of ["/control", "/team/a", "/team/b", "/teams", "/status", "/overlay/main"]) {
+    const escaped = route.replaceAll("/", "\\/");
+    assert.match(routes, new RegExp(`router\\.get\\(\\"${escaped}\\",\\s*pageRateLimiter,`));
+  }
+});
+
+test("repository publishes a private vulnerability reporting policy", () => {
+  const policy = read(".github/SECURITY.md");
+  assert.match(policy, /GitHub Security Advisories/);
+  assert.match(policy, /Do not open a public issue/i);
+  assert.match(policy, /within 7 days/i);
+});
+
 test("offline release workflow cannot bypass critical field validation gates", () => {
   const workflow = read(".github/workflows/release-offline.yml");
   for (const required of [
