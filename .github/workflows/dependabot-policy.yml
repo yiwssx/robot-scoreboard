@@ -62,7 +62,7 @@ jobs:
           echo "eligible=false" >> "$GITHUB_OUTPUT"
           gh pr edit "$PR_URL" --add-label "dependencies"
 
-          if [ "$PACKAGE_ECOSYSTEM" != "npm" ]; then
+          if [ "$PACKAGE_ECOSYSTEM" != "npm" ] && [ "$PACKAGE_ECOSYSTEM" != "npm_and_yarn" ]; then
             gh pr edit "$PR_URL" --remove-label "dependency-direct" >/dev/null 2>&1 || true
             gh pr edit "$PR_URL" --remove-label "dependency-security" >/dev/null 2>&1 || true
             gh pr edit "$PR_URL" --remove-label "automerge-safe" >/dev/null 2>&1 || true
