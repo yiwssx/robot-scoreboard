@@ -43,3 +43,27 @@ jobs:
           path: codeql-results/*.sarif
           if-no-files-found: error
           retention-days: 1
+
+  dependency-audit-diagnostics:
+    name: Dependency audit diagnostics
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Export npm audit JSON
+        shell: bash
+        run: npm audit --json > npm-audit.json || true
+      - name: Upload npm audit diagnostics
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-audit-${{ github.run_id }}
+          path: npm-audit.json
+          if-no-files-found: error
+          retention-days: 1
