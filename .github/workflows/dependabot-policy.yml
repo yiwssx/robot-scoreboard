@@ -90,6 +90,7 @@ jobs:
               gh pr edit "$PR_URL" --remove-label "dependency-security" >/dev/null 2>&1 || true
               gh pr edit "$PR_URL" --remove-label "dependency-indirect-blocked" >/dev/null 2>&1 || true
               gh pr edit "$PR_URL" --remove-label "dependency-policy-blocked" >/dev/null 2>&1 || true
+              gh pr edit "$PR_URL" --remove-label "dependency-hold" >/dev/null 2>&1 || true
               echo "eligible=true" >> "$GITHUB_OUTPUT"
               ;;
 
@@ -111,6 +112,7 @@ jobs:
               gh pr edit "$PR_URL" --remove-label "dependency-direct" >/dev/null 2>&1 || true
               gh pr edit "$PR_URL" --remove-label "dependency-indirect-blocked" >/dev/null 2>&1 || true
               gh pr edit "$PR_URL" --remove-label "dependency-policy-blocked" >/dev/null 2>&1 || true
+              gh pr edit "$PR_URL" --remove-label "dependency-hold" >/dev/null 2>&1 || true
               echo "eligible=true" >> "$GITHUB_OUTPUT"
               ;;
 
