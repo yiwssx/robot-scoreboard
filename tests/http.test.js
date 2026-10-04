@@ -70,10 +70,12 @@ test("field status exposes central-machine and broadcast diagnostics", async () 
   });
 });
 
-test("control page uses bundled typed client entry", async () => {
+test("control page uses bundled typed client entry and rate limiting", async () => {
   await withServer(async (baseUrl) => {
     const control = await fetch(`${baseUrl}/control`);
     assert.equal(control.status, 200);
+    assert.ok(control.headers.has("ratelimit"));
+    assert.ok(control.headers.has("ratelimit-policy"));
     const html = await control.text();
     assert.match(html, /\/app\/control\.js/);
     assert.doesNotMatch(html, /\sonclick=/i);
