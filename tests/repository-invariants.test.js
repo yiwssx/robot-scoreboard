@@ -40,6 +40,23 @@ test("dependency automation keeps routine updates direct while allowing a narrow
   assert.match(automerge, /dependency-hold/);
 });
 
+test("Engine.IO stays above the protocol-revision DoS security floor", () => {
+  const lock = JSON.parse(read("package-lock.json"));
+  const engineIo = lock.packages?.["node_modules/engine.io"];
+  assert.ok(engineIo?.version, "package-lock.json must resolve engine.io");
+
+  const parts = engineIo.version.split(".").map((part) => Number.parseInt(part, 10));
+  assert.equal(parts.length, 3, `unexpected engine.io version: ${engineIo.version}`);
+  assert.ok(parts.every(Number.isInteger), `unexpected engine.io version: ${engineIo.version}`);
+
+  const [major, minor, patch] = parts;
+  const patched = major > 6 || (major === 6 && (minor > 6 || (minor === 6 && patch >= 10)));
+  assert.ok(
+    patched,
+    `engine.io ${engineIo.version} is affected by GHSA-2gc4-cqfq-p2gv; require >= 6.6.10`,
+  );
+});
+
 test("CI keeps dependency review and current action runtimes", () => {
   const workflow = read(".github/workflows/ci.yml");
   assert.match(workflow, /actions\/dependency-review-action@v5/);
