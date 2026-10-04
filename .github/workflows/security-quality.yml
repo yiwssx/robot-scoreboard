@@ -34,3 +34,12 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:javascript-typescript"
+          output: codeql-results
+      - name: Upload SARIF diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: codeql-sarif-${{ github.run_id }}
+          path: codeql-results/*.sarif
+          if-no-files-found: error
+          retention-days: 1
