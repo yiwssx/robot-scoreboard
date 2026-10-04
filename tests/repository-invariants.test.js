@@ -18,6 +18,7 @@ test("dependency automation keeps routine updates direct while allowing a narrow
   const policy = read(".github/workflows/dependabot-policy.yml");
   assert.match(policy, /PACKAGE_ECOSYSTEM/);
   assert.match(policy, /PACKAGE_ECOSYSTEM" != "npm"/);
+  assert.match(policy, /npm_and_yarn/);
   assert.match(policy, /grep -Fxq 'package\.json'/);
   assert.match(policy, /DEPENDENCY_TYPE/);
   assert.match(policy, /indirect\)/);
@@ -39,6 +40,25 @@ test("dependency automation keeps routine updates direct while allowing a narrow
   assert.match(automerge, /dependency-hold/);
 });
 
+test("CI keeps dependency review and current action runtimes", () => {
+  const workflow = read(".github/workflows/ci.yml");
+  assert.match(workflow, /actions\/dependency-review-action@v5/);
+  assert.match(workflow, /fail-on-severity:\s*high/);
+  assert.match(workflow, /actions\/checkout@v7/);
+  assert.match(workflow, /actions\/setup-node@v7/);
+  assert.match(workflow, /persist-credentials:\s*false/);
+  assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node)@v4/);
+});
+
+test("CodeQL security analysis remains enabled for application code", () => {
+  const workflow = read(".github/workflows/security-quality.yml");
+  assert.match(workflow, /security-events:\s*write/);
+  assert.match(workflow, /github\/codeql-action\/init@v4/);
+  assert.match(workflow, /github\/codeql-action\/analyze@v4/);
+  assert.match(workflow, /languages:\s*javascript-typescript/);
+  assert.match(workflow, /github\.actor != 'dependabot\[bot\]'/);
+});
+
 test("offline release workflow cannot bypass critical field validation gates", () => {
   const workflow = read(".github/workflows/release-offline.yml");
   for (const required of [
@@ -55,6 +75,10 @@ test("offline release workflow cannot bypass critical field validation gates", (
   }
   assert.match(workflow, /github\.ref_type == 'tag'/);
   assert.match(workflow, /package\.json version/);
+  assert.match(workflow, /actions\/checkout@v7/);
+  assert.match(workflow, /actions\/setup-node@v7/);
+  assert.match(workflow, /actions\/upload-artifact@v7/);
+  assert.match(workflow, /persist-credentials:\s*false/);
 });
 
 test("offline process control is scoped to the managed scoreboard process", () => {
