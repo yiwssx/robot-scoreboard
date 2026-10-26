@@ -44,8 +44,8 @@ test("dependency automation keeps routine updates direct while allowing a narrow
   assert.match(automerge, /head_sha/);
   assert.match(automerge, /run_number, \.run_attempt/);
   assert.match(automerge, /RUN_CONCLUSION.*success/);
-  assert.match(automerge, /merge_method=\x27merge\x27/);
-  assert.doesNotMatch(automerge, /merge_method=\x27squash\x27/);
+  assert.match(automerge, /merge_method=\x27squash\x27/);
+  assert.doesNotMatch(automerge, /merge_method=\x27merge\x27/);
 });
 
 test("Engine.IO stays above the protocol-revision DoS security floor", () => {
