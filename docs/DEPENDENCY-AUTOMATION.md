@@ -23,7 +23,7 @@ The routine policy is enforced in multiple layers:
 - `versioning-strategy: increase` requires routine direct version updates to be represented in the manifest requirement
 - direct automated dependency PRs must modify `package.json`
 - non-npm Dependabot PRs are outside policy, labeled `dependency-policy-blocked` + `dependency-hold`, and closed
-- auto-merge requires an eligible dependency label + `automerge-safe` and exact-head CI success
+- auto-merge requires an eligible dependency label + `automerge-safe` and successful exact-head CI **and CodeQL** workflows
 
 GitHub Actions versions are **not** maintained automatically by Dependabot in this repository. Workflow action upgrades are deliberate manual maintenance changes and must pass normal CI review.
 
@@ -45,7 +45,7 @@ This exception does **not** permit general lockfile maintenance:
 - patch/minor updates may receive `automerge-safe`
 - major/unknown updates remain manual
 - `dependency-hold` still blocks automatic merge
-- exact-head CI success is still mandatory
+- exact-head CI and CodeQL success are still mandatory
 
 An indirect PR that changes any file other than `package-lock.json` is labeled `dependency-indirect-blocked` + `dependency-hold` and closed.
 
@@ -69,19 +69,19 @@ A Dependabot pull request is classified using `dependabot/fetch-metadata@v3`.
 - indirect update that changes anything besides `package-lock.json`: blocked and closed
 - non-npm Dependabot update: blocked and closed
 
-Automatic merge only happens when the existing `CI` workflow finishes successfully for the exact current PR head SHA. The merge workflow independently verifies that the PR:
+Automatic merge runs only after both the existing `CI` and `Security Quality` (CodeQL) workflows finish successfully for the exact current PR head SHA. Either workflow's completion can trigger the check, but the merge is blocked until both pass. The merge workflow independently verifies that the PR:
 
 1. comes from a `dependabot/*` branch
 2. is owned by `dependabot[bot]`
 3. targets `main`
-4. still has the same head SHA that passed CI
+4. still has the same head SHA that passed CI and CodeQL
 5. has either `dependency-direct` or `dependency-security`
 6. has `automerge-safe`
 7. does not have `dependency-indirect-blocked`
 8. does not have `dependency-policy-blocked`
 9. does not have `dependency-hold`
 
-Eligible updates are squash-merged into `main`.
+Eligible updates are **squash-merged** into `main` to comply with the active main ruleset (`required_linear_history`, squash-only). Dependabot PRs must pass CodeQL via the `pull_request` event *before* this squash; GitHub permits PR code scanning uploads even when Dependabot has a read-only token. Post-merge push scans must not be assumed to run with write permissions on a Dependabot-authored squash commit, and automated merges using `GITHUB_TOKEN` may not trigger push workflows. The scheduled CodeQL scan on `main` remains a separate safety net. Failed, skipped, pending, or missing PR security scans never qualify for auto-merge.
 
 ## Field freeze
 

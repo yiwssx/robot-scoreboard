@@ -2,10 +2,11 @@ name: Dependabot Auto Merge
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["CI", "Security Quality"]
     types: [completed]
 
 permissions:
+  actions: read
   contents: write
   pull-requests: write
 
@@ -16,7 +17,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Merge safe dependency update after exact-head CI success
+      - name: Merge safe dependency update after exact-head CI and CodeQL success
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -78,7 +79,28 @@ jobs:
             exit 0
           fi
 
-          echo "CI passed on exact head $HEAD_SHA; squash-merging eligible Dependabot PR #$PR_NUMBER."
+          # CI and Security Quality are independent workflows and can finish in any order.
+          # Never merge based on one successful run or results from an older PR head.
+          for WORKFLOW in ci.yml security-quality.yml; do
+            RUNS="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs" \
+              -f event='pull_request' -f head_sha="$HEAD_SHA" -f per_page='100')"
+            EXACT_RUN="$(jq -c --arg sha "$HEAD_SHA" --arg branch "$HEAD_BRANCH" \
+              '[.workflow_runs[] | select(.event == "pull_request" and .head_sha == $sha and .head_branch == $branch)] | sort_by(.run_number, .run_attempt) | last // empty' \
+              <<<"$RUNS")"
+            if [ -z "$EXACT_RUN" ]; then
+              echo "No $WORKFLOW run on the current PR head $HEAD_SHA; skipping auto-merge."
+              exit 0
+            fi
+
+            RUN_STATUS="$(jq -r '.status' <<<"$EXACT_RUN")"
+            RUN_CONCLUSION="$(jq -r '.conclusion' <<<"$EXACT_RUN")"
+            if [ "$RUN_STATUS" != 'completed' ] || [ "$RUN_CONCLUSION" != 'success' ]; then
+              echo "$WORKFLOW is $RUN_STATUS/$RUN_CONCLUSION for $HEAD_SHA; skipping auto-merge."
+              exit 0
+            fi
+          done
+
+          echo "CI and CodeQL passed on exact head $HEAD_SHA; squash-merging eligible Dependabot PR #$PR_NUMBER."
           RESULT="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
             -f merge_method='squash' -f sha="$HEAD_SHA")"
           if [ "$(jq -r '.merged' <<<"$RESULT")" != 'true' ]; then

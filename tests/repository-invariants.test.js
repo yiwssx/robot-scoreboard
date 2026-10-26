@@ -38,6 +38,14 @@ test("dependency automation keeps routine updates direct while allowing a narrow
   assert.match(automerge, /dependency-policy-blocked/);
   assert.match(automerge, /dependency-indirect-blocked/);
   assert.match(automerge, /dependency-hold/);
+  assert.match(automerge, /workflows: \["CI", "Security Quality"\]/);
+  assert.match(automerge, /actions:\s*read/);
+  assert.match(automerge, /for WORKFLOW in ci\.yml security-quality\.yml/);
+  assert.match(automerge, /head_sha/);
+  assert.match(automerge, /run_number, \.run_attempt/);
+  assert.match(automerge, /RUN_CONCLUSION.*success/);
+  assert.match(automerge, /merge_method=\x27squash\x27/);
+  assert.doesNotMatch(automerge, /merge_method=\x27merge\x27/);
 });
 
 test("Engine.IO stays above the protocol-revision DoS security floor", () => {
@@ -57,6 +65,26 @@ test("Engine.IO stays above the protocol-revision DoS security floor", () => {
   );
 });
 
+test("lockfile resolves patched versions for known October 2026 DoS advisories", () => {
+  const packages = JSON.parse(read("package-lock.json")).packages;
+  const required = [
+    { name: "body-parser", floor: [2, 4, 0], advisory: "GHSA-27r3-jxmh-p828" },
+    { name: "ip-address", floor: [10, 7, 4], advisory: "GHSA-rxp7-6hxx-x8q5" },
+  ];
+
+  for (const { name, floor, advisory } of required) {
+    const version = packages["node_modules/" + name]?.version;
+    assert.ok(version, "missing lockfile dependency: " + name);
+    const parts = version.split(".").map((part) => Number.parseInt(part, 10));
+    assert.equal(parts.length, 3, "unexpected semver: " + version);
+    assert.ok(parts.every(Number.isInteger), "invalid semver: " + version);
+    const patched = parts[0] > floor[0] ||
+      (parts[0] === floor[0] && (parts[1] > floor[1] ||
+        (parts[1] === floor[1] && parts[2] >= floor[2])));
+    assert.ok(patched, name + " " + version + " is vulnerable to " + advisory);
+  }
+});
+
 test("CI keeps dependency review and current action runtimes", () => {
   const workflow = read(".github/workflows/ci.yml");
   assert.match(workflow, /actions\/dependency-review-action@v5/);
@@ -73,7 +101,8 @@ test("CodeQL security analysis remains enabled for application code", () => {
   assert.match(workflow, /github\/codeql-action\/init@v4/);
   assert.match(workflow, /github\/codeql-action\/analyze@v4/);
   assert.match(workflow, /languages:\s*javascript-typescript/);
-  assert.match(workflow, /github\.actor != 'dependabot\[bot\]'/);
+  assert.match(workflow, /pull_request:/);
+  assert.doesNotMatch(workflow, /github\.actor != 'dependabot\[bot\]'/);
 });
 
 test("filesystem-backed page routes remain rate-limited", () => {
