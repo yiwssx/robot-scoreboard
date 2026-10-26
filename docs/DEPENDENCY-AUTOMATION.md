@@ -81,7 +81,7 @@ Automatic merge runs only after both the existing `CI` and `Security Quality` (C
 8. does not have `dependency-policy-blocked`
 9. does not have `dependency-hold`
 
-Eligible updates use a **merge commit** into `main`. This avoids Dependabot-authored squash commits causing restricted-token CodeQL runs on `main`. Dependabot PRs are scanned via the `pull_request` event, which supports CodeQL result uploads even when the bot token is read-only. Failed, skipped, pending, or missing security scans never qualify for auto-merge.
+Eligible updates are **squash-merged** into `main` to comply with the active main ruleset (`required_linear_history`, squash-only). Dependabot PRs must pass CodeQL via the `pull_request` event *before* this squash; GitHub permits PR code scanning uploads even when Dependabot has a read-only token. Post-merge push scans must not be assumed to run with write permissions on a Dependabot-authored squash commit, and automated merges using `GITHUB_TOKEN` may not trigger push workflows. The scheduled CodeQL scan on `main` remains a separate safety net. Failed, skipped, pending, or missing PR security scans never qualify for auto-merge.
 
 ## Field freeze
 
