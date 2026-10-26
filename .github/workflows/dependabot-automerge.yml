@@ -100,9 +100,9 @@ jobs:
             fi
           done
 
-          echo "CI and CodeQL passed on exact head $HEAD_SHA; merging eligible Dependabot PR #$PR_NUMBER."
+          echo "CI and CodeQL passed on exact head $HEAD_SHA; squash-merging eligible Dependabot PR #$PR_NUMBER."
           RESULT="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
-            -f merge_method='merge' -f sha="$HEAD_SHA")"
+            -f merge_method='squash' -f sha="$HEAD_SHA")"
           if [ "$(jq -r '.merged' <<<"$RESULT")" != 'true' ]; then
             echo "$RESULT"
             exit 1
