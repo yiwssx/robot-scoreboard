@@ -38,6 +38,14 @@ test("dependency automation keeps routine updates direct while allowing a narrow
   assert.match(automerge, /dependency-policy-blocked/);
   assert.match(automerge, /dependency-indirect-blocked/);
   assert.match(automerge, /dependency-hold/);
+  assert.match(automerge, /workflows: \["CI", "Security Quality"\]/);
+  assert.match(automerge, /actions:\s*read/);
+  assert.match(automerge, /for WORKFLOW in ci\.yml security-quality\.yml/);
+  assert.match(automerge, /head_sha/);
+  assert.match(automerge, /run_number, \.run_attempt/);
+  assert.match(automerge, /RUN_CONCLUSION.*success/);
+  assert.match(automerge, /merge_method=\x27merge\x27/);
+  assert.doesNotMatch(automerge, /merge_method=\x27squash\x27/);
 });
 
 test("Engine.IO stays above the protocol-revision DoS security floor", () => {
@@ -73,7 +81,8 @@ test("CodeQL security analysis remains enabled for application code", () => {
   assert.match(workflow, /github\/codeql-action\/init@v4/);
   assert.match(workflow, /github\/codeql-action\/analyze@v4/);
   assert.match(workflow, /languages:\s*javascript-typescript/);
-  assert.match(workflow, /github\.actor != 'dependabot\[bot\]'/);
+  assert.match(workflow, /pull_request:/);
+  assert.doesNotMatch(workflow, /github\.actor != 'dependabot\[bot\]'/);
 });
 
 test("filesystem-backed page routes remain rate-limited", () => {
